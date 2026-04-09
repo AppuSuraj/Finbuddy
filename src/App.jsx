@@ -3,6 +3,8 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Portfolio from './components/Portfolio';
 import BankAccounts from './components/BankAccounts';
+import Settings from './components/Settings';
+import Importer from './components/Importer';
 import './App.css'; // Keeps standard import structure
 
 function App() {
@@ -16,6 +18,8 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/accounts" element={<BankAccounts />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/import" element={<Importer />} />
           </Routes>
         </main>
       </div>
