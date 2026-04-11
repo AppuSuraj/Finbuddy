@@ -271,11 +271,16 @@ const finbuddyInsightsPlugin = () => ({
       const url = new URL(req.originalUrl || req.url, `http://${req.headers.host}`);
       const symbol = url.searchParams.get('symbol');
       if (!symbol) return next();
+      
+      const ALL_SECTORS = [
+        'Aerospace & Defense', 'Agricultural Food & other Products', 'Agricultural, Commercial & Construction Vehicles', 'Auto Components', 'Automobiles', 'Banks', 'Beverages', 'Capital Markets', 'Cement & Cement Products', 'Chemicals & Petrochemicals', 'Cigarettes & Tobacco Products', 'Commercial Services & Supplies', 'Construction', 'Consumable Fuels', 'Consumer Durables', 'Diversified', 'Diversified FMCG', 'Diversified Metals', 'Electrical Equipment', 'Engineering Services', 'Entertainment', 'Ferrous Metals', 'Fertilizers & Agrochemicals', 'Finance', 'Financial Technology (Fintech)', 'Food Products', 'Gas', 'Healthcare Equipment & Supplies', 'Healthcare Services', 'Household Products', 'Industrial Manufacturing', 'Industrial Products', 'Insurance', 'IT - Hardware', 'IT - Services', 'IT - Software', 'Leisure Services', 'Media', 'Metals & Minerals Trading', 'Minerals & Mining', 'Non - Ferrous Metals', 'Oil', 'Other Construction Materials', 'Other Consumer Services', 'Other Utilities', 'Paper, Forest & Jute Products', 'Personal Products', 'Petroleum Products', 'Pharmaceuticals & Biotechnology', 'Power', 'Printing & Publication', 'Realty', 'Retailing', 'Telecom - Equipment & Accessories', 'Telecom - Services', 'Textiles & Apparels', 'Transport Infrastructure', 'Transport Services', 'Uncategorized'
+      ];
+
       try {
          const profile = await yahooFinance.quoteSummary(symbol, { modules: ['assetProfile', 'price'] });
          let sector = profile.assetProfile?.sector || 'Unknown';
          
-         // Fallback Heuristic: If Yahoo fails, check name/symbol keywords
+         // 1. Keyword Heuristic Fallback
          if (sector === 'Unknown') {
             const fullName = profile.price?.longName || '';
             const shortName = profile.price?.shortName || '';
@@ -286,6 +291,41 @@ const finbuddyInsightsPlugin = () => ({
                   sector = sec;
                   break;
                }
+            }
+         }
+
+         // 2. Screener.in Deep Research Fallback
+         if (sector === 'Unknown' || sector === 'Uncategorized') {
+            try {
+               const cleanTicker = symbol.split('.')[0];
+               const screenerUrl = `https://www.screener.in/company/${cleanTicker}/`;
+               const response = await fetch(screenerUrl, {
+                  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+               });
+               
+               if (response.ok) {
+                  const html = await response.text();
+                  // Regex to pull Industry title text
+                  const industryMatch = html.match(/title="Industry">(.*?)<\/a>/i);
+                  const sectorMatch = html.match(/title="Sector">(.*?)<\/a>/i);
+                  
+                  const targetStr = (industryMatch ? industryMatch[1] : (sectorMatch ? sectorMatch[1] : '')).trim();
+                  
+                  if (targetStr) {
+                     // Fuzzy match to the 58 sectors
+                     const normTarget = targetStr.toLowerCase();
+                     const closest = ALL_SECTORS.find(s => 
+                        normTarget.includes(s.toLowerCase()) || s.toLowerCase().includes(normTarget)
+                     );
+                     if (closest) sector = closest;
+                     else if (targetStr.includes('Defense')) sector = 'Aerospace & Defense';
+                     else if (targetStr.includes('Bank')) sector = 'Banks';
+                     else if (targetStr.includes('IT')) sector = 'IT - Services';
+                     else sector = targetStr; // Use Screener's string directly as a backup
+                  }
+               }
+            } catch (e) {
+               console.error("Deep Scrape Failed:", e.message);
             }
          }
 

@@ -298,7 +298,7 @@ export default function Portfolio({ session }) {
         </div>
         <div className="flex gap-4">
           <button className="btn btn-secondary" onClick={handleRefreshLivePrices} disabled={refreshing}>
-            <RefreshCw size={18} className={refreshing ? "spin-animation" : ""} /> {refreshing ? 'Fetching Data...' : 'Live Quotes'}
+            <RefreshCw size={18} className={refreshing ? "spin-animation" : ""} /> {refreshing ? 'Deep Researching via Screener...' : 'Live Quotes'}
           </button>
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : <><Plus size={18}/> Add Asset</>}
