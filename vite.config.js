@@ -229,15 +229,46 @@ const finbuddyInsightsPlugin = () => ({
       }
     });
 
+    // Internal Heuristic Mapping for Indian Stocks (NSE/BSE)
+    const SECTOR_MAPPING = {
+      'Defense': ['Mazagon', 'HAL', 'BEL', 'Bharat Electronics', 'Cochin Shipyard', 'Garden Reach', 'Data Patterns'],
+      'Energy': ['Reliance', 'ONGC', 'NTPC', 'Coal India', 'Power Grid', 'Adani Green', 'Tata Power', 'NHPC', 'SJVN', 'Indian Oil', 'BPCL'],
+      'Financial Services': ['HDFC', 'SBI', 'ICICI', 'Kotak', 'Axis', 'Bajaj Finance', 'LIC', 'Punjab National', 'Canara', 'Union Bank', 'IDFC'],
+      'Technology': ['TCS', 'Infosys', 'Wipro', 'HCL', 'Tech Mahindra', 'LTIMindtree', 'Persistent', 'Zensar', 'Coforge'],
+      'Industrials': ['L&T', 'Adani Ent', 'Adani Ports', 'Ultratech', 'Siemens', 'ABB', 'Cummins'],
+      'Basic Materials': ['Tata Steel', 'JSW Steel', 'Hindalco', 'Vedanta', 'JSPL', 'NMDC', 'Hindustan Zinc'],
+      'Consumer Cyclical': ['Maruti', 'Tata Motors', 'Mahindra', 'Bajaj Auto', 'Eicher', 'Hero MotoCorp', 'Titan'],
+      'Consumer Defensive': ['ITC', 'HUL', 'Nestle', 'Britannia', 'Dabur', 'Marico', 'Varun Beverages'],
+      'Healthcare': ['Sun Pharma', 'Dr Reddys', 'Cipla', 'Apollo Hospitals', 'Max Healthcare', 'Zydus'],
+      'Utilities': ['Gail', 'Gujarat Gas', 'IGL', 'MGL'],
+      'Communication Services': ['Airtel', 'Bharti', 'Jio', 'Vodafone', 'Indus Towers']
+    };
+
     // Sub-Route: Heavy Background Sector Lookup
     server.middlewares.use('/api/profile', async (req, res, next) => {
       const url = new URL(req.originalUrl || req.url, `http://${req.headers.host}`);
       const symbol = url.searchParams.get('symbol');
       if (!symbol) return next();
       try {
-         const profile = await yahooFinance.quoteSummary(symbol, { modules: ['assetProfile'] });
+         const profile = await yahooFinance.quoteSummary(symbol, { modules: ['assetProfile', 'price'] });
+         let sector = profile.assetProfile?.sector || 'Unknown';
+         
+         // Fallback Heuristic: If Yahoo fails, check name/symbol keywords
+         if (sector === 'Unknown') {
+            const fullName = profile.price?.longName || '';
+            const shortName = profile.price?.shortName || '';
+            const searchStr = `${symbol} ${fullName} ${shortName}`.toLowerCase();
+
+            for (const [sec, keywords] of Object.entries(SECTOR_MAPPING)) {
+               if (keywords.some(k => searchStr.includes(k.toLowerCase()))) {
+                  sector = sec;
+                  break;
+               }
+            }
+         }
+
          res.setHeader('Content-Type', 'application/json');
-         res.end(JSON.stringify({ sector: profile.assetProfile?.sector || 'Unknown' }));
+         res.end(JSON.stringify({ sector: sector }));
       } catch (err) {
          res.setHeader('Content-Type', 'application/json');
          res.end(JSON.stringify({ error: true, sector: 'Unknown' }));

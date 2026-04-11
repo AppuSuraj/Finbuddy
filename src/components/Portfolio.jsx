@@ -1,7 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, YAxis } from 'recharts';
-import { TrendingUp, Layers, Plus, Search, RefreshCw, LayoutGrid, List, ArrowLeft, Newspaper, Info } from 'lucide-react';
+import { TrendingUp, Layers, Plus, Search, RefreshCw, LayoutGrid, List, ArrowLeft, Newspaper, Info, Edit3, ShieldCheck } from 'lucide-react';
+
+const SECTORS = [
+  'Defense', 'Energy', 'Financial Services', 'Technology', 'Industrials', 
+  'Basic Materials', 'Consumer Cyclical', 'Consumer Defensive', 'Healthcare', 
+  'Utilities', 'Communication Services', 'Real Estate', 'Uncategorized'
+];
 
 const getRelativeTime = (timeProp) => {
    if (!timeProp) return 'Unknown Date';
@@ -71,6 +77,7 @@ export default function Portfolio({ session }) {
   const [insightsData, setInsightsData] = useState(null);
   const [fetchingInsights, setFetchingInsights] = useState(false);
   const [deepScanStates, setDeepScanStates] = useState({});
+  const [isEditingSector, setIsEditingSector] = useState(false);
 
   useEffect(() => {
     fetchAssets();
@@ -207,7 +214,7 @@ export default function Portfolio({ session }) {
     setSelectedAsset(asset);
     setFetchingInsights(true);
     setInsightsData(null);
-    setDeepScanStates({});
+    setIsEditingSector(false);
     
     // Parse ticker name
     const match = asset.name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
@@ -231,6 +238,19 @@ export default function Portfolio({ session }) {
       setInsightsData({ error: 'Failed to fetch insights' });
     }
     setFetchingInsights(false);
+  };
+
+  const handleManualSectorUpdate = async (newSec) => {
+    if (!selectedAsset) return;
+    
+    const { error } = await supabase.from('assets').update({ sector: newSec }).eq('id', selectedAsset.id);
+    if (!error) {
+       // Update local state instantly
+       const updatedAllocations = assetAllocation.map(a => a.id === selectedAsset.id ? { ...a, sector: newSec } : a);
+       setAssetAllocation(updatedAllocations);
+       setSelectedAsset({ ...selectedAsset, sector: newSec });
+       setIsEditingSector(false);
+    }
   };
 
   const totalValue = assetAllocation.reduce((acc, curr) => acc + Number(curr.value), 0);
@@ -499,10 +519,28 @@ export default function Portfolio({ session }) {
                 <h2 style={{ fontSize: '32px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                    {selectedAsset.name.split('(')[0].trim()} Insights
                 </h2>
-                <button className="btn btn-secondary" style={{ padding: '6px 16px' }} onClick={() => setSelectedAsset(null)}>
-                  Close
-                </button>
-             </div>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    {!isEditingSector ? (
+                       <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setIsEditingSector(true)}>
+                          <Edit3 size={14} /> {selectedAsset.sector || 'Uncategorized'}
+                       </button>
+                    ) : (
+                       <div className="flex items-center gap-2">
+                          <select 
+                            value={selectedAsset.sector || 'Uncategorized'} 
+                            onChange={(e) => handleManualSectorUpdate(e.target.value)}
+                            style={{ background: 'var(--bg-color)', color: '#fff', border: '1px solid var(--accent-primary)', borderRadius: '6px', padding: '4px 8px', outline: 'none', fontSize: '13px' }}
+                          >
+                             {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                          <button className="text-muted text-xs hover-text-primary" onClick={() => setIsEditingSector(false)}>Cancel</button>
+                       </div>
+                    )}
+                    <button className="btn btn-secondary" style={{ padding: '6px 16px' }} onClick={() => setSelectedAsset(null)}>
+                      Close
+                    </button>
+                 </div>
+              </div>
              
              {fetchingInsights ? (
                <div style={{ padding: '60px 0', textAlign: 'center' }}>
