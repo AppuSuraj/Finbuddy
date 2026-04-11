@@ -5,7 +5,7 @@ import { FileUp, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 
 const COLORS = ['#2dd4bf', '#0ea5e9', '#f59e0b', '#8b5cf6', '#ef4444', '#10b981'];
 
-export default function Importer() {
+export default function Importer({ session }) {
   const [data, setData] = useState([]);
   const [csvType, setCsvType] = useState('none'); // none, stocks, bank, transactions
   const [status, setStatus] = useState('idle'); // idle, parsing, uploading, done, error
@@ -63,7 +63,12 @@ export default function Importer() {
     let errorObj = null;
 
     if (csvType === 'stocks') {
-       const { error } = await supabase.from('assets').insert(data);
+       // Inject user_id into each object so multi-tenancy works
+       const dataWithUser = data.map(item => ({
+          ...item,
+          user_id: session.user.id
+       }));
+       const { error } = await supabase.from('assets').insert(dataWithUser);
        errorObj = error;
     }
 
