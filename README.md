@@ -1,16 +1,30 @@
-# React + Vite
+# Finbuddy: Professional Portfolio Terminal & Market Intelligence Engine
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Finbuddy is a React-powered, full-stack intelligence platform dedicated to seamlessly aggregating personal stock portfolios while scraping actionable AI insights natively from Google News and Yahoo Finance. 
 
-Currently, two official plugins are available:
+Built strictly for single-minded portfolio intelligence, Finbuddy tracks Indian (NSE/BSE) stock health, provides smart CSV importer ingestion, and ranks incoming Google News via custom, deep-integrated Natural Language Processing (AFINN sentiment dictionary).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Key Features
 
-## React Compiler
+* **Cinematic Analytics HUD**: An immersive, dark-mode 3x3 dashboard structure showcasing absolute asset exposure, Donut Allocations, and precise weighting tables using sleek glassmorphism panels.
+* **NLP Intelligence Scraper (Sentiment Engine)**: An internal Vite API interceptor seamlessly tracks the Google News RSS endpoints to load targeted headlines. Those headlines are mathematically processed via a Natural Language Processing Sentiment Engine to badge breaking news with Live Market Sentiments (🟢 Positive, 🔴 Negative, ⚪ Neutral).
+* **Deep Financial Proxy Framework**: Fully intercepts and wraps `yahoo-finance2` metrics under the hood perfectly dodging CORS to deliver Book Value, PE ratios, and dividend data directly into the DOM via a Z-Index 50 Absolute Screen Modal.
+* **One-Click Vault Importer**: Intelligently auto-parses your raw CSV broker statements via regex heuristic pattern detection, seamlessly mapping arrays of new equity data strictly to your Supabase cloud backend in under a second. 
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🛠️ Stack & Technologies Used
 
-## Expanding the ESLint configuration
+- **Frontend Core**: React Elements mapped via Vite (ESM routing powered by `react-router-dom`).
+- **Styling Architecture**: Vanilla CSS with robust design variables, dynamic animations, and structural Glassmorphism aesthetics (`backdrop-filter`).
+- **Intelligent Visualizations**: Recharts (Custom customized active-shape grouping algorithms routing the "Top 6" slicing).
+- **Backend Infrastructure**: Supabase / PostgreSQL handling robust transactional logic and synchronizations across your cloud tables.
+- **Custom Node Edge Pipelines**: 
+  - `rss-parser` (Firing backend algorithmic queries mapping `GET` requests to Google News specifically engineered for the `en-IN` India locale feed).
+  - `yahoo-finance2` (V3 Architecture integration for scraping granular metrics: Market Cap, 52W High/Lows, and ROA metrics).
+  - `sentiment` (NLP Textual Analysis dictionary mapping tool calculating numeric weights inside the proxy before mapping back the JSON).
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 📦 Setup & Live Build Instructions
+
+1. Retrieve the project and immediately execute `npm install` inside the root to securely reconstruct all client, charting, and backend node scraping packages.
+2. Guarantee you have appropriately mounted the `.env` root keys defining `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+3. Ignite the system using `npm run dev`. *The active Node Backend Server will actively mount the specialized middleware HTTP RSS proxy simultaneously while building the React UI!*
+4. Access the command terminal bridge via `http://localhost:5173/`.

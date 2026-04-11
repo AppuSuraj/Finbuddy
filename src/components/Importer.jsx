@@ -30,7 +30,7 @@ export default function Importer() {
           results.meta.fields || Object.keys(results.data[0]).map((k) => k.toLowerCase());
         const headersStr = headers.join(' ').toLowerCase();
 
-        // 1. Heuristic: Stocks Test
+        // Strict Heuristic: Portfolio Stocks
         if (headersStr.includes('instrument') && headersStr.includes('cur. val')) {
           setCsvType('stocks');
           let parsedStocks = results.data.filter(r => r.Instrument && r['Cur. val']).map((row, i) => {
@@ -41,45 +41,8 @@ export default function Importer() {
             };
           });
           setData(parsedStocks);
-        } 
-        // 2. Heuristic: Bank Test
-        else if (headersStr.includes('balance') && (headersStr.includes('debit') || headersStr.includes('credit') || headersStr.includes('withdrawal'))) {
-          setCsvType('bank');
-          // Find the last valid balance in the file
-          let lastBalance = 0;
-          for (let i = results.data.length - 1; i >= 0; i--) {
-             let balStr = results.data[i].Balance || results.data[i].balance || '0';
-             balStr = balStr.replace(/,/g, '');
-             let possibleBal = Number(balStr);
-             if (!isNaN(possibleBal) && possibleBal !== 0) {
-               lastBalance = possibleBal;
-               break;
-             }
-          }
-          // Only show what we are going to import
-          setData([{
-             name: 'Imported Bank Statement Account',
-             type: 'Checking',
-             balance: lastBalance
-          }]);
-        } 
-        // 3. Heuristic: Transactions Fallback
-        else {
-          setCsvType('transactions');
-          let parsedTx = results.data.map(row => {
-            const amount = Number(row.amount || row.Amount || row.Withdrawal || 0);
-            let type = row.type || row.Type || row.type_label;
-            if (!type) {
-              type = amount < 0 ? 'expense' : 'income'; // default
-            }
-            return {
-              description: row.description || row.Description || row.Narration || 'Imported Tx',
-              amount: amount,
-              type: type.toLowerCase(),
-              date_label: row.date || row.Date || row.date_label || 'Imported'
-            };
-          });
-          setData(parsedTx);
+        } else {
+          setStatus('error');
         }
 
         setStatus('idle');
@@ -101,12 +64,6 @@ export default function Importer() {
 
     if (csvType === 'stocks') {
        const { error } = await supabase.from('assets').insert(data);
-       errorObj = error;
-    } else if (csvType === 'bank') {
-       const { error } = await supabase.from('accounts').insert(data);
-       errorObj = error;
-    } else if (csvType === 'transactions') {
-       const { error } = await supabase.from('transactions').insert(data);
        errorObj = error;
     }
 
@@ -148,11 +105,7 @@ export default function Importer() {
             <h3 style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>
                 Preview: 
-                <span className="text-success" style={{ marginLeft: '8px' }}>
                   {csvType === 'stocks' && 'Portfolio Assets Detected'}
-                  {csvType === 'bank' && 'Bank Account Found'}
-                  {csvType === 'transactions' && 'Standard Transactions Detected'}
-                </span>
                 <span className="text-muted text-sm" style={{marginLeft:'8px'}}>({data.length} records)</span>
               </span>
               <button 
@@ -167,36 +120,7 @@ export default function Importer() {
             <div style={{ maxHeight: '300px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 
-                {csvType === 'transactions' && (
-                  <>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                        <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Date</th>
-                        <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Description</th>
-                        <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Type</th>
-                        <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Amount</th>
-                        <th style={{ padding: '10px', textAlign: 'right' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.map((row, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <td style={{ padding: '10px' }}>{row.date_label}</td>
-                          <td style={{ padding: '10px' }}>{row.description}</td>
-                          <td style={{ padding: '10px', textTransform: 'capitalize' }}>{row.type}</td>
-                          <td className={row.amount > 0 ? "text-success" : "text-danger"} style={{ padding: '10px', fontWeight: 600 }}>
-                            {row.amount > 0 ? '+' : ''}₹{Math.abs(row.amount).toLocaleString('en-IN')}
-                          </td>
-                          <td style={{ padding: '10px', textAlign: 'right' }}>
-                            <button onClick={() => handleRemoveRow(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}>
-                              <Trash2 size={18} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </>
-                )}
+
 
                 {csvType === 'stocks' && (
                   <>
@@ -228,28 +152,7 @@ export default function Importer() {
                   </>
                 )}
 
-                {csvType === 'bank' && (
-                  <>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                        <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Action</th>
-                        <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Target Account Record</th>
-                        <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Extracted Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.map((row, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <td style={{ padding: '10px', color: 'var(--accent-primary)' }}>Creates New Bank Account</td>
-                          <td style={{ padding: '10px' }}>{row.name} ({row.type})</td>
-                          <td className={row.balance > 0 ? "text-success" : "text-danger"} style={{ padding: '10px', fontWeight: 600 }}>
-                            {row.balance > 0 ? '+' : ''}₹{Math.abs(row.balance).toLocaleString('en-IN')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </>
-                )}
+
 
               </table>
             </div>

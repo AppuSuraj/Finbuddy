@@ -1,16 +1,40 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, Layers, Plus } from 'lucide-react';
+import { TrendingUp, Layers, Plus, Search, RefreshCw, LayoutGrid, List, ArrowLeft, Newspaper, Info } from 'lucide-react';
+
+const getRelativeTime = (timeProp) => {
+   if (!timeProp) return 'Unknown Date';
+   const date = new Date(timeProp);
+   if (isNaN(date.getTime())) return 'Invalid Date';
+   
+   const diffMs = new Date() - date;
+   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+   const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+   
+   if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+   if (diffHrs > 0) return `${diffHrs} hour${diffHrs > 1 ? 's' : ''} ago`;
+   return 'Just now';
+};
 
 export default function Portfolio() {
   const [assetAllocation, setAssetAllocation] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // New Asset State
   const [showForm, setShowForm] = useState(false);
   const [newAsset, setNewAsset] = useState({ name: '', value: '', color: '#2dd4bf' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Filter/Sort State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('value-desc'); 
+  const [viewMode, setViewMode] = useState('list'); // list, table
+
+  // Insights State
+  const [selectedAsset, setSelectedAsset] = useState(null);
+  const [insightsData, setInsightsData] = useState(null);
+  const [fetchingInsights, setFetchingInsights] = useState(false);
 
   useEffect(() => {
     fetchAssets();
@@ -44,18 +68,122 @@ export default function Portfolio() {
     setIsSubmitting(false);
   }
 
+  // Engine for Sorting & Filtering
+  const filteredAndSortedAssets = useMemo(() => {
+    let result = assetAllocation.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    if (sortBy === 'value-desc') {
+      result.sort((a, b) => Number(b.value) - Number(a.value));
+    } else if (sortBy === 'value-asc') {
+      result.sort((a, b) => Number(a.value) - Number(b.value));
+    } else if (sortBy === 'az') {
+      result.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return result;
+  }, [assetAllocation, searchQuery, sortBy]);
+
+  // Yahoo Finance Fetcher Layer
+  const fetchPrice = async (ticker, suffix) => {
+    try {
+      const res = await fetch(`/api/finance/${ticker}.${suffix}`);
+      const data = await res.json();
+      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      return price ? Number(price) : null;
+    } catch {
+       return null;
+    }
+  };
+
+  const handleRefreshLivePrices = async () => {
+    setRefreshing(true);
+    let updatedCount = 0;
+    const newAllocations = [...assetAllocation];
+
+    for (let i = 0; i < newAllocations.length; i++) {
+      let asset = newAllocations[i];
+      // Regex detects imported convention: "TICKER (10 shares)"
+      const match = asset.name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
+      
+      if (!match) continue; // Skip custom added assets that don't match the format
+      
+      const ticker = match[1].trim();
+      const qty = Number(match[2]);
+
+      let price = await fetchPrice(ticker, 'NS');
+      if (price === null) {
+        price = await fetchPrice(ticker, 'BO'); // Fallback to BSE
+      }
+
+      if (price !== null) {
+        const newVal = price * qty;
+        newAllocations[i].value = newVal;
+        await supabase.from('assets').update({ value: newVal }).eq('id', asset.id);
+        updatedCount++;
+      }
+    }
+    
+    setAssetAllocation(newAllocations);
+    setRefreshing(false);
+    if (updatedCount > 0) alert(`Successfully updated ${updatedCount} assets via Live Markets!`);
+    else alert('No valid stock tickers identified. Make sure they were imported via Smart Import.');
+  };
+
+  const handleSelectAsset = async (asset) => {
+    setSelectedAsset(asset);
+    setFetchingInsights(true);
+    setInsightsData(null);
+    
+    // Parse ticker name
+    const match = asset.name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
+    let ticker = asset.name;
+    if (match) ticker = match[1].trim();
+
+    try {
+      const queryName = encodeURIComponent(asset.name);
+      let res = await fetch(`/api/insights?symbol=${ticker}.NS&name=${queryName}`);
+      let data = await res.json();
+      
+      // Fallback logic
+      if (data.error || (!data.profile && (!data.news || data.news.length === 0))) {
+         res = await fetch(`/api/insights?symbol=${ticker}.BO&name=${queryName}`);
+         data = await res.json();
+      }
+
+      setInsightsData(data);
+    } catch {
+      setInsightsData({ error: 'Failed to fetch insights' });
+    }
+    setFetchingInsights(false);
+  };
+
   const totalValue = assetAllocation.reduce((acc, curr) => acc + Number(curr.value), 0);
+
+  const groupedAssets = useMemo(() => {
+    if (assetAllocation.length <= 7) return assetAllocation;
+    const sorted = [...assetAllocation].sort((a,b) => Number(b.value) - Number(a.value));
+    const top = sorted.slice(0, 6);
+    const othersValue = sorted.slice(6).reduce((acc, curr) => acc + Number(curr.value), 0);
+    return [
+      ...top,
+      { id: 'others', name: 'Other Assets', value: othersValue, color: '#475569', isOther: true }
+    ];
+  }, [assetAllocation]);
 
   return (
     <div className="animate-in">
       <div className="page-header">
         <div>
           <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>Investment Portfolio</h1>
-          <p className="text-muted">Track your wealth allocation across different asset classes.</p>
+          <p className="text-muted">Track and analyze your live wealth allocation.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Cancel' : <><Plus size={18}/> Add Asset</>}
-        </button>
+        <div className="flex gap-4">
+          <button className="btn btn-secondary" onClick={handleRefreshLivePrices} disabled={refreshing}>
+            <RefreshCw size={18} className={refreshing ? "spin-animation" : ""} /> {refreshing ? 'Fetching Data...' : 'Live Quotes'}
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'Cancel' : <><Plus size={18}/> Add Asset</>}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -85,7 +213,7 @@ export default function Portfolio() {
         <p className="text-muted">Analyzing Assets from Database...</p>
       ) : assetAllocation.length === 0 ? (
         <div className="glass-panel text-center" style={{ padding: '40px' }}>
-          <p className="text-muted">No assets found. Please run the Supabase schema.</p>
+          <p className="text-muted">No assets found. Import from CSV or Add manually.</p>
         </div>
       ) : (
         <div style={styles.grid}>
@@ -97,52 +225,250 @@ export default function Portfolio() {
               <ResponsiveContainer>
                 <PieChart>
                   <Pie
-                    data={assetAllocation}
-                    innerRadius={80}
-                    outerRadius={120}
-                    paddingAngle={5}
+                    data={groupedAssets}
+                    innerRadius={95}
+                    outerRadius={125}
+                    paddingAngle={3}
+                    cornerRadius={5}
                     dataKey="value"
                     stroke="none"
                   >
-                    {assetAllocation.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    {groupedAssets.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={entry.color} 
+                        onClick={() => {
+                          if (!entry.isOther) handleSelectAsset(entry);
+                        }}
+                        style={{ cursor: entry.isOther ? 'default' : 'pointer', outline: 'none' }}
+                      />
                     ))}
                   </Pie>
                   <Tooltip 
                     formatter={(value) => `₹${Number(value).toLocaleString('en-IN')}`}
-                    contentStyle={{ background: '#0a1f26', border: '1px solid var(--card-border)', borderRadius: '8px', color: '#fff' }}
+                    contentStyle={{ background: 'rgba(10, 31, 38, 0.9)', backdropFilter: 'blur(10px)', border: '1px solid var(--card-border)', borderRadius: '12px', color: '#fff', fontSize: '14px' }}
                     itemStyle={{ color: '#fff' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
               <div style={styles.centerText}>
-                <p className="text-muted text-sm">Total Assets</p>
-                <h2 style={{ fontSize: '28px' }}>₹{totalValue.toLocaleString('en-IN')}</h2>
+                <p className="text-muted text-sm" style={{ letterSpacing: '1px', textTransform: 'uppercase' }}>Total Wealth</p>
+                <h2 style={{ fontSize: '26px', fontWeight: 700, margin: '4px 0 0 0' }}>₹{totalValue.toLocaleString('en-IN')}</h2>
               </div>
             </div>
           </div>
 
-          <div className="glass-panel delay-2">
-            <h3 style={{ marginBottom: '30px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <TrendingUp size={20} className="text-secondary" /> Holdings Breakdown
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {assetAllocation.map((asset, i) => {
-                const percentage = totalValue === 0 ? 0 : ((asset.value / totalValue) * 100).toFixed(1);
-                return (
-                  <div key={asset.id} style={styles.assetCard}>
-                    <div className="flex items-center gap-4">
-                      <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: asset.color }}></div>
-                      <span style={{ fontWeight: 500, fontSize: '18px' }}>{asset.name}</span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontWeight: 600, fontSize: '18px' }}>₹{Number(asset.value).toLocaleString('en-IN')}</p>
-                      <p className="text-muted text-sm">{percentage}% of portfolio</p>
-                    </div>
-                  </div>
-                );
-              })}
+          <div className="glass-panel delay-2" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: '30px' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <TrendingUp size={20} className="text-secondary" /> Holdings Vault
+              </h3>
+              
+              <div className="flex gap-2">
+                <div style={{ position: 'relative' }}>
+                  <Search size={16} className="text-muted" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+                  <input 
+                    type="text" 
+                    placeholder="Search asset..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{ ...styles.input, marginTop: 0, paddingLeft: '32px', width: '140px' }} 
+                  />
+                </div>
+                <select 
+                  value={sortBy} 
+                  onChange={(e) => setSortBy(e.target.value)} 
+                  style={{...styles.input, marginTop: 0, width: '130px'}}
+                >
+                  <option value="value-desc">Highest Value</option>
+                  <option value="value-asc">Lowest Value</option>
+                  <option value="az">A-Z Name</option>
+                </select>
+                <button className="btn btn-secondary" style={{ padding: '8px' }} onClick={() => setViewMode(viewMode === 'list' ? 'table' : 'list')}>
+                  {viewMode === 'list' ? <List size={18} /> : <LayoutGrid size={18} />}
+                </button>
+              </div>
             </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, maxHeight: '400px', pr: '10px' }} className="vault-scroll">
+              
+              {viewMode === 'list' ? (
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {filteredAndSortedAssets.map((asset, i) => {
+                    const percentage = totalValue === 0 ? 0 : ((asset.value / totalValue) * 100).toFixed(1);
+                    return (
+                      <div key={asset.id} style={styles.assetCard} onClick={() => handleSelectAsset(asset)}>
+                        <div className="flex items-center gap-4">
+                          <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: asset.color }}></div>
+                          <span style={{ fontWeight: 500, fontSize: '18px' }}>{asset.name}</span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ fontWeight: 600, fontSize: '18px' }}>₹{Number(asset.value).toLocaleString('en-IN')}</p>
+                          <p className="text-muted text-sm">{percentage}% of portfolio</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '15px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Identifier</th>
+                      <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Portfolio Weight</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'right', color: 'var(--text-muted)' }}>Market Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAndSortedAssets.map((asset, i) => {
+                      const percentage = totalValue === 0 ? 0 : ((asset.value / totalValue) * 100).toFixed(1);
+                      return (
+                        <tr key={asset.id} onClick={() => handleSelectAsset(asset)} style={{ cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s', ':hover': { background: 'rgba(255,255,255,0.02)' }}}>
+                          <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: asset.color }}></div>
+                            <span style={{ fontWeight: 500 }}>{asset.name}</span>
+                          </td>
+                          <td style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>{percentage}%</td>
+                          <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            ₹{Number(asset.value).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+
+              {filteredAndSortedAssets.length === 0 && (
+                 <p className="text-center text-muted" style={{ padding: '40px 0' }}>No assets match your search.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Translucent Fullscreen Modal Overlay */}
+      {selectedAsset && (
+        <div 
+          className="animate-in" 
+          style={{ 
+            position: 'fixed', inset: 0, zIndex: 50, 
+            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+            background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(8px)', padding: '20px' 
+          }}
+          onClick={() => setSelectedAsset(null)}
+        >
+          <div 
+            className="glass-panel" 
+            style={{ 
+              width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', 
+              padding: '40px', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', border: '1px solid var(--accent-primary)' 
+            }}
+            onClick={e => e.stopPropagation()}
+            className="vault-scroll"
+          >
+             <div className="flex justify-between items-center" style={{ marginBottom: '24px' }}>
+                <h2 style={{ fontSize: '32px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                   {selectedAsset.name.split('(')[0].trim()} Insights
+                </h2>
+                <button className="btn btn-secondary" style={{ padding: '6px 16px' }} onClick={() => setSelectedAsset(null)}>
+                  Close
+                </button>
+             </div>
+             
+             {fetchingInsights ? (
+               <div style={{ padding: '60px 0', textAlign: 'center' }}>
+                 <p className="text-muted text-lg flex items-center justify-center gap-3"><RefreshCw size={24} className="spin-animation" /> Scraping Financial Terminals...</p>
+               </div>
+             ) : insightsData?.error || (!insightsData?.profile && (!insightsData?.news || insightsData?.news.length === 0)) ? (
+               <p className="text-danger mt-4 text-center">Failed to load detailed insights. Ensure API proxy is running and ticker is publicly listed.</p>
+             ) : insightsData ? (
+               <div>
+                 <div style={{ 
+                   display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '40px' 
+                 }}>
+                    {/* Row 1 */}
+                    <div className="glass-panel" style={{ padding: '20px' }}>
+                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Market Cap</p>
+                       <p className="font-semibold" style={{ fontSize: '22px' }}>
+                         {insightsData.profile?.summaryDetail?.marketCap ? `₹${(insightsData.profile.summaryDetail.marketCap / 10000000).toFixed(0)} Cr.` : 'N/A'}
+                       </p>
+                    </div>
+                    <div className="glass-panel" style={{ padding: '20px' }}>
+                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Current Price</p>
+                       <p className="font-semibold" style={{ fontSize: '22px', color: 'var(--accent-primary)' }}>
+                         {insightsData.profile?.price?.regularMarketPrice ? `₹${insightsData.profile.price.regularMarketPrice.toLocaleString('en-IN')}` : 'N/A'}
+                       </p>
+                    </div>
+                    <div className="glass-panel" style={{ padding: '20px' }}>
+                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>High / Low (52w)</p>
+                       <p className="font-semibold" style={{ fontSize: '22px' }}>
+                         {insightsData.profile?.summaryDetail?.fiftyTwoWeekHigh && insightsData.profile?.summaryDetail?.fiftyTwoWeekLow ? 
+                           `₹${insightsData.profile.summaryDetail.fiftyTwoWeekHigh.toLocaleString('en-IN')} / ₹${insightsData.profile.summaryDetail.fiftyTwoWeekLow.toLocaleString('en-IN')}` : 'N/A'
+                         }
+                       </p>
+                    </div>
+
+                    {/* Row 2 */}
+                    <div className="glass-panel" style={{ padding: '20px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Stock P/E</p>
+                       <p className="font-semibold" style={{ fontSize: '22px' }}>{insightsData.profile?.summaryDetail?.trailingPE?.toFixed(2) || 'N/A'}</p>
+                    </div>
+                    <div className="glass-panel" style={{ padding: '20px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Book Value</p>
+                       <p className="font-semibold" style={{ fontSize: '22px' }}>
+                         {insightsData.profile?.defaultKeyStatistics?.bookValue ? `₹${insightsData.profile.defaultKeyStatistics.bookValue.toFixed(2)}` : 'N/A'}
+                       </p>
+                    </div>
+                    <div className="glass-panel" style={{ padding: '20px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Dividend Yield</p>
+                       <p className="font-semibold" style={{ fontSize: '22px' }}>
+                         {insightsData.profile?.summaryDetail?.dividendYield ? `${(insightsData.profile.summaryDetail.dividendYield * 100).toFixed(2)} %` : 'N/A'}
+                       </p>
+                    </div>
+
+                    {/* Row 3 */}
+                    <div className="glass-panel" style={{ padding: '20px' }}>
+                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>ROCE (ROA Proxy)</p>
+                       <p className="font-semibold" style={{ fontSize: '22px' }}>
+                         {insightsData.profile?.financialData?.returnOnAssets ? `${(insightsData.profile.financialData.returnOnAssets * 100).toFixed(1)} %` : 'N/A'}
+                       </p>
+                    </div>
+                    <div className="glass-panel" style={{ padding: '20px' }}>
+                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>ROE</p>
+                       <p className="font-semibold" style={{ fontSize: '22px' }}>
+                         {insightsData.profile?.financialData?.returnOnEquity ? `${(insightsData.profile.financialData.returnOnEquity * 100).toFixed(1)} %` : 'N/A'}
+                       </p>
+                    </div>
+                    <div className="glass-panel" style={{ padding: '20px' }}>
+                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Face Value</p>
+                       <p className="font-semibold" style={{ fontSize: '22px' }}>N/A</p>
+                    </div>
+                 </div>
+                 
+                 <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Newspaper size={20} color="var(--accent-primary)" /> Latest Market Intelligence
+                 </h3>
+
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                   {insightsData.news && insightsData.news.length > 0 ? insightsData.news.map((item, idx) => (
+                     <a key={idx} href={item.link} target="_blank" rel="noreferrer" className="glass-panel" style={{ padding: '20px', display: 'block', textDecoration: 'none', color: 'inherit', background: 'rgba(0,0,0,0.1)', borderLeft: item.sentimentGrade === 'Positive' ? '4px solid #22c55e' : item.sentimentGrade === 'Negative' ? '4px solid #ef4444' : '4px solid #94a3b8' }}>
+                       <div className="flex justify-between items-start gap-4" style={{ marginBottom: '8px' }}>
+                         <p className="font-semibold" style={{ fontSize: '17px', lineHeight: '1.4' }}>{item.title}</p>
+                         <span style={{ 
+                           padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap',
+                           background: item.sentimentGrade === 'Positive' ? 'rgba(34,197,94,0.1)' : item.sentimentGrade === 'Negative' ? 'rgba(239,68,68,0.1)' : 'rgba(148,163,184,0.1)',
+                           color: item.sentimentGrade === 'Positive' ? '#4ade80' : item.sentimentGrade === 'Negative' ? '#f87171' : '#cbd5e1'
+                         }}>
+                           {item.sentimentGrade === 'Positive' ? '🟢 Positive' : item.sentimentGrade === 'Negative' ? '🔴 Negative' : '⚪ Neutral'}
+                         </span>
+                       </div>
+                       <p className="text-xs text-muted">{item.publisher} • {getRelativeTime(item.providerPublishTime)}</p>
+                     </a>
+                   )) : <p className="text-muted text-center" style={{ padding: '30px' }}>No recent news articles logged for this specific asset.</p>}
+                 </div>
+               </div>
+             ) : null}
           </div>
         </div>
       )}
@@ -152,9 +478,9 @@ export default function Portfolio() {
 
 const styles = {
   input: {
-    width: '100%', padding: '10px 14px', marginTop: '6px', borderRadius: '8px', 
-    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', 
-    color: '#fff', outline: 'none', fontFamily: 'inherit'
+    width: '100%', padding: '8px 12px', borderRadius: '8px', 
+    background: 'var(--bg-color)', border: '1px solid var(--card-border)', 
+    color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', fontSize: '14px'
   },
   grid: {
     display: 'grid',
@@ -173,10 +499,11 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '20px',
-    background: 'rgba(255,255,255,0.02)',
+    background: 'rgba(0,0,0,0.1)',
     borderRadius: '12px',
-    border: '1px solid rgba(255,255,255,0.05)',
+    border: '1px solid var(--card-border)',
     transition: 'all 0.2s ease',
     cursor: 'pointer'
   }
 };
+

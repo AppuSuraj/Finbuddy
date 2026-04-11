@@ -4,15 +4,25 @@ import { supabase } from '../supabaseClient';
 
 export default function Settings() {
   const [profileName, setProfileName] = useState('Suraj');
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [saved, setSaved] = useState(false);
   const [erasing, setErasing] = useState(false);
 
+  // Apply theme on load
+  useState(() => {
+    if (localStorage.getItem('theme') === 'light') document.body.classList.add('light-theme');
+  });
+
   const handleSave = (e) => {
     e.preventDefault();
+    if (theme === 'light') {
+      document.body.classList.add('light-theme');
+    } else {
+      document.body.classList.remove('light-theme');
+    }
+    localStorage.setItem('theme', theme);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-    // In a full app, this would write to a 'profiles' table in Supabase
   };
 
   const handleEraseData = async () => {

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, PieChart, Landmark, Settings as SettingsIcon, FileUp } from 'lucide-react';
+import { LayoutDashboard, PieChart, Settings as SettingsIcon, FileUp } from 'lucide-react';
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -7,7 +7,6 @@ export default function Sidebar() {
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Portfolio', path: '/portfolio', icon: PieChart },
-    { name: 'Bank Accounts', path: '/accounts', icon: Landmark },
     { name: 'Smart Import', path: '/import', icon: FileUp }
   ];
 
