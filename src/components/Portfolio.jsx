@@ -51,7 +51,7 @@ const Sparkline = ({ name }) => {
   );
 };
 
-export default function Portfolio() {
+export default function Portfolio({ session }) {
   const [assetAllocation, setAssetAllocation] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,7 +77,7 @@ export default function Portfolio() {
   }, []);
 
   async function fetchAssets() {
-    const { data, error } = await supabase.from('assets').select('*').order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('assets').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true });
     if (!error && data) {
       setAssetAllocation(data);
     }
@@ -88,12 +88,14 @@ export default function Portfolio() {
     e.preventDefault();
     setIsSubmitting(true);
     
+    // Add defensive check in case the user has not migrated Supabase DB yet
     const { error } = await supabase.from('assets').insert([
       { 
         name: newAsset.name, 
         value: Number(newAsset.value), 
         color: newAsset.color,
-        buy_price: newAsset.buy_price ? Number(newAsset.buy_price) : null
+        buy_price: newAsset.buy_price ? Number(newAsset.buy_price) : null,
+        user_id: session.user.id
       }
     ]);
 
@@ -154,7 +156,15 @@ export default function Portfolio() {
       } catch { return null; }
     };
 
-    const promises = newAllocations.map(async (asset, i) => {
+    let targetAllocations = newAllocations;
+    const isAdmin = session?.user?.email === 'surajsan1998@gmail.com';
+    
+    if (!isAdmin && targetAllocations.length > 5) {
+       targetAllocations = newAllocations.slice(0, 5);
+       alert("GUEST ACCOUNT BOUNDARY: Throttling live market scrape to top 5 portfolio assets to prevent massive proxy rate-limiting.");
+    }
+    
+    const promises = targetAllocations.map(async (asset, i) => {
       const match = asset.name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
       if (!match) return; 
       

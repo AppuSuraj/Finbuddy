@@ -39,10 +39,10 @@ function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/portfolio" element={<Portfolio />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/import" element={<Importer />} />
+            <Route path="/dashboard" element={<Dashboard session={session} />} />
+            <Route path="/portfolio" element={<Portfolio session={session} />} />
+            <Route path="/settings" element={<Settings session={session} />} />
+            <Route path="/import" element={<Importer session={session} />} />
           </Routes>
         </main>
       </div>

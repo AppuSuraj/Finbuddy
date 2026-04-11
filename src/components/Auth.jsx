@@ -35,7 +35,7 @@ export default function Auth() {
           <Shield size={48} className="text-secondary" style={{ margin: '0 auto 20px auto' }} />
           <h2 style={{ fontSize: '28px', marginBottom: '8px' }}>Finbuddy Terminal</h2>
           <p className="text-muted text-sm" style={{ marginBottom: '30px', letterSpacing: '0.5px' }}>
-            Restricted Advanced Oracle Systems
+            Restricted Predictive Intelligence Systems
           </p>
 
           <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

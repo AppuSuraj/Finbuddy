@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { ArrowUpRight, Radar, PieChart as PieIcon, Radio } from 'lucide-react';
-export default function Dashboard() {
+export default function Dashboard({ session }) {
   const [netWorth, setNetWorth] = useState(0);
   const [weather, setWeather] = useState({ percent: 50, articleCount: 0 });
   
@@ -18,7 +18,7 @@ export default function Dashboard() {
   }, []);
 
   async function fetchDashboardData() {
-    const { data: assetData } = await supabase.from('assets').select('*');
+    const { data: assetData } = await supabase.from('assets').select('*').eq('user_id', session.user.id);
     let totalAssets = 0;
     
     if (assetData && assetData.length > 0) {
@@ -75,12 +75,19 @@ export default function Dashboard() {
     { name: 'Empty', value: 100 - weather.percent, fill: 'rgba(255,255,255,0.05)' }
   ];
 
+  const isAdmin = session?.user?.email === 'surajsan1998@gmail.com';
+
   return (
     <div className="animate-in">
       <div className="page-header">
         <div>
-          <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>
-            Welcome back, <span className="text-gradient">Suraj</span>
+          <h1 style={{ fontSize: '36px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            Welcome back, <span className="text-gradient">{isAdmin ? 'Suraj' : 'Investor'}</span>
+            {isAdmin && (
+               <span style={{ fontSize: '14px', background: 'var(--accent-primary)', color: '#000', padding: '4px 10px', borderRadius: '16px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>
+                  👑 System Creator
+               </span>
+            )}
           </h1>
           <p className="text-muted">Here is your live intelligence dashboard.</p>
         </div>
