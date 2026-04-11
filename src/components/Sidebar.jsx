@@ -1,15 +1,20 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, PieChart, Settings as SettingsIcon, FileUp, LogOut } from 'lucide-react';
+import { LayoutDashboard, PieChart, Settings as SettingsIcon, FileUp, LogOut, ShieldAlert } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
-export default function Sidebar() {
+export default function Sidebar({ session }) {
   const navigate = useNavigate();
+  const isAdmin = session?.user?.email === 'surajsan1998@gmail.com';
 
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Portfolio', path: '/portfolio', icon: PieChart },
     { name: 'Smart Import', path: '/import', icon: FileUp }
   ];
+
+  if (isAdmin) {
+    navItems.push({ name: 'System Meta-Vault', path: '/admin', icon: ShieldAlert });
+  }
 
   return (
     <aside style={styles.sidebar}>

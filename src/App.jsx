@@ -6,6 +6,7 @@ import Portfolio from './components/Portfolio';
 import Settings from './components/Settings';
 import Importer from './components/Importer';
 import Auth from './components/Auth';
+import AdminConsole from './components/AdminConsole';
 import { supabase } from './supabaseClient';
 import './App.css'; // Keeps standard import structure
 
@@ -35,7 +36,7 @@ function App() {
   return (
     <Router>
       <div className="app-container">
-        <Sidebar />
+        <Sidebar session={session} />
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -43,6 +44,7 @@ function App() {
             <Route path="/portfolio" element={<Portfolio session={session} />} />
             <Route path="/settings" element={<Settings session={session} />} />
             <Route path="/import" element={<Importer session={session} />} />
+            <Route path="/admin" element={<AdminConsole session={session} />} />
           </Routes>
         </main>
       </div>
