@@ -4,9 +4,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, YAx
 import { TrendingUp, Layers, Plus, Search, RefreshCw, LayoutGrid, List, ArrowLeft, Newspaper, Info, Edit3, ShieldCheck } from 'lucide-react';
 
 const SECTORS = [
-  'Defense', 'Energy', 'Financial Services', 'Technology', 'Industrials', 
-  'Basic Materials', 'Consumer Cyclical', 'Consumer Defensive', 'Healthcare', 
-  'Utilities', 'Communication Services', 'Real Estate', 'Uncategorized'
+  'Aerospace & Defense', 'Agricultural Food & other Products', 'Agricultural, Commercial & Construction Vehicles', 'Auto Components', 'Automobiles', 'Banks', 'Beverages', 'Capital Markets', 'Cement & Cement Products', 'Chemicals & Petrochemicals', 'Cigarettes & Tobacco Products', 'Commercial Services & Supplies', 'Construction', 'Consumable Fuels', 'Consumer Durables', 'Diversified', 'Diversified FMCG', 'Diversified Metals', 'Electrical Equipment', 'Engineering Services', 'Entertainment', 'Ferrous Metals', 'Fertilizers & Agrochemicals', 'Finance', 'Financial Technology (Fintech)', 'Food Products', 'Gas', 'Healthcare Equipment & Supplies', 'Healthcare Services', 'Household Products', 'Industrial Manufacturing', 'Industrial Products', 'Insurance', 'IT - Hardware', 'IT - Services', 'IT - Software', 'Leisure Services', 'Media', 'Metals & Minerals Trading', 'Minerals & Mining', 'Non - Ferrous Metals', 'Oil', 'Other Construction Materials', 'Other Consumer Services', 'Other Utilities', 'Paper, Forest & Jute Products', 'Personal Products', 'Petroleum Products', 'Pharmaceuticals & Biotechnology', 'Power', 'Printing & Publication', 'Realty', 'Retailing', 'Telecom - Equipment & Accessories', 'Telecom - Services', 'Textiles & Apparels', 'Transport Infrastructure', 'Transport Services', 'Uncategorized'
 ];
 
 const getRelativeTime = (timeProp) => {
@@ -255,9 +253,19 @@ export default function Portfolio({ session }) {
 
   const totalValue = assetAllocation.reduce((acc, curr) => acc + Number(curr.value), 0);
 
+  // Deterministic HSL Generator for 58+ Categories
   const getSectorColor = (sector) => {
-    const map = { 'Technology': '#3b82f6', 'Energy': '#eab308', 'Financial Services': '#10b981', 'Healthcare': '#ef4444', 'Industrials': '#f97316', 'Consumer Defensive': '#ec4899', 'Consumer Cyclical': '#d946ef', 'Basic Materials': '#8b5cf6', 'Communication Services': '#0ea5e9', 'Utilities': '#14b8a6', 'Real Estate': '#f43f5e' };
-    return map[sector] || '#64748b';
+    if (!sector || sector === 'Uncategorized' || sector === 'Unknown') return '#64748b';
+    
+    // Hash function to turn string into consistent hue
+    let hash = 0;
+    for (let i = 0; i < sector.length; i++) {
+        hash = sector.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    const hue = Math.abs(hash % 360);
+    // Fixed Saturation & Lightness for a premium "Oceanic Dark" feel
+    return `hsl(${hue}, 70%, 55%)`;
   };
 
   const finalGroupedAssets = useMemo(() => {

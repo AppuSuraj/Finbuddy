@@ -229,19 +229,41 @@ const finbuddyInsightsPlugin = () => ({
       }
     });
 
-    // Internal Heuristic Mapping for Indian Stocks (NSE/BSE)
+    // Professional Granular Heuristic Mapping for NSE/BSE Stocks
     const SECTOR_MAPPING = {
-      'Defense': ['Mazagon', 'HAL', 'BEL', 'Bharat Electronics', 'Cochin Shipyard', 'Garden Reach', 'Data Patterns'],
-      'Energy': ['Reliance', 'ONGC', 'NTPC', 'Coal India', 'Power Grid', 'Adani Green', 'Tata Power', 'NHPC', 'SJVN', 'Indian Oil', 'BPCL'],
-      'Financial Services': ['HDFC', 'SBI', 'ICICI', 'Kotak', 'Axis', 'Bajaj Finance', 'LIC', 'Punjab National', 'Canara', 'Union Bank', 'IDFC'],
-      'Technology': ['TCS', 'Infosys', 'Wipro', 'HCL', 'Tech Mahindra', 'LTIMindtree', 'Persistent', 'Zensar', 'Coforge'],
-      'Industrials': ['L&T', 'Adani Ent', 'Adani Ports', 'Ultratech', 'Siemens', 'ABB', 'Cummins'],
-      'Basic Materials': ['Tata Steel', 'JSW Steel', 'Hindalco', 'Vedanta', 'JSPL', 'NMDC', 'Hindustan Zinc'],
-      'Consumer Cyclical': ['Maruti', 'Tata Motors', 'Mahindra', 'Bajaj Auto', 'Eicher', 'Hero MotoCorp', 'Titan'],
-      'Consumer Defensive': ['ITC', 'HUL', 'Nestle', 'Britannia', 'Dabur', 'Marico', 'Varun Beverages'],
-      'Healthcare': ['Sun Pharma', 'Dr Reddys', 'Cipla', 'Apollo Hospitals', 'Max Healthcare', 'Zydus'],
-      'Utilities': ['Gail', 'Gujarat Gas', 'IGL', 'MGL'],
-      'Communication Services': ['Airtel', 'Bharti', 'Jio', 'Vodafone', 'Indus Towers']
+      'Aerospace & Defense': ['Mazagon', 'HAL', 'BEL', 'Bharat Electronics', 'Cochin Shipyard', 'Garden Reach', 'Data Patterns', 'Astra Microwave'],
+      'Power': ['Reliance Power', 'NTPC', 'Coal India', 'Power Grid', 'Adani Green', 'Tata Power', 'NHPC', 'SJVN', 'Suzlon', 'Adani Power', 'JSPW'],
+      'Banks': ['HDFC', 'SBI', 'ICICI', 'Kotak', 'Axis', 'IndusInd', 'Bank of Baroda', 'PNB', 'Canara', 'Union Bank', 'IDFC', 'Federal Bank', 'Bandhan'],
+      'IT - Services': ['TCS', 'Infosys', 'Wipro', 'HCL', 'Tech Mahindra', 'LTIMindtree', 'Mphasis', 'Mindtree'],
+      'IT - Software': ['Newgen', 'Persistent', 'Zensar', 'Coforge', 'Oracle Financial', 'KPIT', 'Birlasoft'],
+      'Petroleum Products': ['Reliance Industries', 'Indian Oil', 'BPCL', 'HPCL', 'MRPL', 'Chennai Petro'],
+      'Pharmaceuticals & Biotechnology': ['Sun Pharma', 'Dr Reddys', 'Cipla', 'Apollo Hospitals', 'Max Healthcare', 'Zydus', 'Lupin', 'Aurobindo', 'Torrent Pharma', 'Divis Lab', 'Biocon', 'Gland'],
+      'Automobiles': ['Maruti', 'Tata Motors', 'Mahindra', 'Bajaj Auto', 'Eicher', 'Hero MotoCorp', 'TVS Motor'],
+      'Auto Components': ['Motherson', 'Bosch', 'MRF', 'Apollo Tyres', 'Sona BLW', 'Uno Minda', 'Exide', 'Amara Raja'],
+      'Diversified FMCG': ['ITC', 'HUL'],
+      'Beverages': ['Varun Beverages', 'United Spirits', 'Radico', 'Tata Consumer'],
+      'Food Products': ['Nestle', 'Britannia', 'Zomato', 'Bikaji', 'Mrs Bector'],
+      'Personal Products': ['Dabur', 'Marico', 'Godrej CP', 'Colgate', 'Emami', 'Nykaa'],
+      'Construction': ['L&T', 'Larsen', 'NCC', 'KNR Construct', 'Dilip Buildcon', 'IRB Infra'],
+      'Realty': ['DLF', 'Godrej Prop', 'Macrotech', 'Oberoi', 'Phoenix Mills', 'Prestige Estates', 'Sobha', 'Brigade'],
+      'Gas': ['Gail', 'Gujarat Gas', 'IGL', 'MGL', 'Adani Total Gas', 'Petronet'],
+      'Telecom - Services': ['Airtel', 'Bharti', 'Jio', 'Vodafone', 'Indus Towers'],
+      'Ferrous Metals': ['Tata Steel', 'JSW Steel', 'JSPL', 'NMDC', 'Kalyani Steels', 'Steel Authority', 'Sail'],
+      'Non - Ferrous Metals': ['Hindalco', 'Vedanta', 'Hindustan Zinc', 'National Aluminium', 'Nalco'],
+      'Cement & Cement Products': ['Ultratech', 'Ambuja', 'Shree Cement', 'ACC', 'Dalmia', 'JK Cement', 'Ramco'],
+      'Finance': ['Bajaj Finance', 'Bajaj Finserv', 'Jio Financial', 'Chola Invest', 'Muthoot', 'Manappuram', 'Shriram Finance', 'REC', 'PFC', 'IREDA'],
+      'Capital Markets': ['BSE', 'MCX', 'CDSL', 'CAMS', 'Angel One', 'HDFC AMC', 'Nippon Life'],
+      'Insurance': ['LIC', 'SBI Life', 'HDFC Life', 'ICICI Pru', 'Star Health', 'GIC Re', 'New India Assurance'],
+      'Chemicals & Petrochemicals': ['SRF', 'Aarti Ind', 'Deepak Nitrite', 'Tata Chemicals', 'Pidilite', 'UPL', 'Navin Fluorine', 'Gujarat Fluorochemicals'],
+      'Fertilizers & Agrochemicals': ['Coromandel', 'Chambal Fert', 'Sumitomo', 'PI Industries', 'Rallis'],
+      'Industrial Products': ['Siemens', 'ABB', 'Cummins', 'Polycab', 'Kirloskar', 'KEI Ind', 'Astral', 'Supreme Ind'],
+      'Industrial Manufacturing': ['Honeywell', 'Bharat Forge', 'Timken', 'SKF India'],
+      'Transport Infrastructure': ['Adani Ports', 'GMR Infra', 'Gujarat Pipavav'],
+      'Transport Services': ['Interglobe', 'Indigo', 'Concor', 'Blue Dart', 'Delhivery'],
+      'Retailing': ['Trent', 'Avenue Supermarts', 'DMart', 'Aditya Birla Fashion', 'Shoppers Stop'],
+      'Media': ['Zee Ent', 'Sun TV', 'PVR INOX', 'Network18'],
+      'Entertainment': ['Saregama', 'Tips Industries', 'Nazara'],
+      'Healthcare Services': ['Apollo Hospitals', 'Max Healthcare', 'Fortis', 'Global Health', 'Narayana Hrudayalaya']
     };
 
     // Sub-Route: Heavy Background Sector Lookup
