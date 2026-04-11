@@ -1,81 +1,51 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
-// We still use static performanceData for the chart as we didn't model historical snapshots in DB yet
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { ArrowUpRight, Radar, PieChart as PieIcon, Radio } from 'lucide-react';
 import { performanceData } from '../data/mockData';
 
 export default function Dashboard() {
-  const [transactions, setTransactions] = useState([]);
   const [netWorth, setNetWorth] = useState(0);
-  const [liquidCash, setLiquidCash] = useState(0);
+  const [weather, setWeather] = useState({ percent: 50, articleCount: 0 });
   const [loading, setLoading] = useState(true);
-
-  // New Transaction State
-  const [showForm, setShowForm] = useState(false);
-  const [newTx, setNewTx] = useState({ description: '', amount: '', type: 'expense' });
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
   async function fetchDashboardData() {
-    // Fetch recent transactions
-    const { data: txData } = await supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(5);
-    if (txData) setTransactions(txData);
-
-    // Calculate dynamic Net Worth from assets
-    const { data: assetData } = await supabase.from('assets').select('value');
+    const { data: assetData } = await supabase.from('assets').select('*');
     let totalAssets = 0;
-    if (assetData) {
+    
+    if (assetData && assetData.length > 0) {
       totalAssets = assetData.reduce((acc, curr) => acc + Number(curr.value), 0);
-    }
-    setNetWorth(totalAssets);
-
-    // Calculate dynamic Liquid Cash from Savings/Checking accounts
-    const { data: accData } = await supabase.from('accounts').select('balance, type');
-    let totalLiquid = 0;
-    if (accData) {
-      accData.forEach(acc => {
-        if (acc.type === 'Checking' || acc.type === 'Savings') {
-          totalLiquid += Number(acc.balance);
+      
+      // Calculate Portfolio Intelligence Weather via Top 4 holdings
+      const sorted = [...assetData].sort((a,b) => Number(b.value) - Number(a.value));
+      const topNames = sorted.slice(0, 4).map(a => encodeURIComponent(a.name.split('(')[0].trim())).join(',');
+      
+      try {
+        const res = await fetch(`/api/portfolio-sentiment?names=${topNames}`);
+        const sentimentData = await res.json();
+        if (sentimentData && typeof sentimentData.percent === 'number') {
+           setWeather(sentimentData);
         }
-      });
+      } catch(e) {}
     }
-    setLiquidCash(totalLiquid);
-
+    
+    setNetWorth(totalAssets);
     setLoading(false);
   }
 
-  async function handleAddTransaction(e) {
-    e.preventDefault();
-    setIsSubmitting(true);
-    
-    const amountVal = newTx.type === 'expense' ? -Math.abs(Number(newTx.amount)) : Math.abs(Number(newTx.amount));
-    
-    const { error } = await supabase.from('transactions').insert([
-      { 
-        description: newTx.description, 
-        amount: amountVal, 
-        type: newTx.type, 
-        date_label: 'Just Now' 
-      }
-    ]);
-
-    if (!error) {
-      setShowForm(false);
-      setNewTx({ description: '', amount: '', type: 'expense' });
-      fetchDashboardData(); // Refreshes live balances and list
-    }
-    setIsSubmitting(false);
-  }
-
   if (loading) {
-    return <div className="main-content"><p className="text-muted">Loading Dashboard...</p></div>;
+    return <div className="main-content"><p className="text-muted">Analyzing Portfolio...</p></div>;
   }
 
-  const liquidPercent = netWorth === 0 ? 0 : ((liquidCash / netWorth) * 100).toFixed(1);
+  const sentimentColor = weather.percent > 65 ? '#2dd4bf' : weather.percent < 45 ? '#ef4444' : '#eab308';
+  const gaugeData = [
+    { name: 'Score', value: weather.percent, fill: sentimentColor },
+    { name: 'Empty', value: 100 - weather.percent, fill: 'rgba(255,255,255,0.05)' }
+  ];
 
   return (
     <div className="animate-in">
@@ -84,111 +54,71 @@ export default function Dashboard() {
           <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>
             Welcome back, <span className="text-gradient">Suraj</span>
           </h1>
-          <p className="text-muted">Here is your live financial summary.</p>
+          <p className="text-muted">Here is your live intelligence dashboard.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Cancel' : '+ Add Transaction'}
-        </button>
       </div>
-
-      {showForm && (
-        <div className="glass-panel animate-in" style={{ marginBottom: '30px', padding: '20px' }}>
-          <h3 style={{ marginBottom: '16px' }}>New Transaction</h3>
-          <form style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }} onSubmit={handleAddTransaction}>
-            <div style={{ flex: 1 }}>
-              <label className="text-xs text-muted">Description</label>
-              <input required type="text" value={newTx.description} onChange={e => setNewTx({...newTx, description: e.target.value})} style={styles.input} placeholder="e.g. Grocery Store" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label className="text-xs text-muted">Amount (₹)</label>
-              <input required type="number" value={newTx.amount} onChange={e => setNewTx({...newTx, amount: e.target.value})} style={styles.input} placeholder="150" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label className="text-xs text-muted">Type</label>
-              <select value={newTx.type} onChange={e => setNewTx({...newTx, type: e.target.value})} style={styles.input}>
-                <option value="expense">Expense</option>
-                <option value="income">Income</option>
-                <option value="investment">Investment</option>
-              </select>
-            </div>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : 'Save'}
-            </button>
-          </form>
-        </div>
-      )}
 
       <div style={styles.metricsGrid}>
         <div className="glass-panel delay-1">
-          <p className="text-muted text-sm">Live Net Worth (from Assets)</p>
+          <p className="text-muted text-sm">Active Wealth Exposure</p>
           <h2 style={{ fontSize: '42px', margin: '10px 0' }}>
             ₹{netWorth.toLocaleString('en-IN')}
           </h2>
           <div className="flex items-center gap-2 text-success" style={{ fontWeight: 500 }}>
             <ArrowUpRight size={20} />
-            <span>Updated live from Supabase</span>
+            <span>Tracking {netWorth > 0 ? 'Live Assets' : 'No Assets Yet'}</span>
           </div>
         </div>
-        <div className="glass-panel delay-2 flex items-center justify-between">
-          <div>
-            <p className="text-muted text-sm">Liquid Cash (Savings & Checking)</p>
-            <h2 style={{ fontSize: '28px', margin: '8px 0' }}>₹{liquidCash.toLocaleString('en-IN')}</h2>
-            <span className="text-sm text-muted">{liquidPercent}% of Net Worth</span>
+        
+        <div className="glass-panel delay-2" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10px' }}>
+          <p className="text-muted text-sm flex items-center gap-2" style={{ marginBottom: '16px' }}>
+             <Radar size={16} color={sentimentColor}/> Macro Intelligence Weather
+          </p>
+          
+          <div style={{ position: 'relative', width: '220px', height: '110px' }}>
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie
+                  data={gaugeData} cx="50%" cy="100%" startAngle={180} endAngle={0}
+                  innerRadius={75} outerRadius={95} paddingAngle={0} dataKey="value" stroke="none" cornerRadius={10}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center' }}>
+               <h2 style={{ fontSize: '34px', margin: '0 0 4px 0', color: sentimentColor }}>{weather.percent}%</h2>
+               <p className="text-muted text-xs" style={{ textTransform: 'uppercase', letterSpacing: '1px' }}>
+                 {weather.percent > 65 ? 'Bullish' : weather.percent < 45 ? 'Bearish' : 'Neutral'}
+               </p>
+            </div>
           </div>
-          <div style={styles.iconBox}>
-            <Wallet size={28} color="var(--accent-primary)" />
-          </div>
+          <p className="text-muted text-xs" style={{ marginTop: '20px' }}>
+             Analysis of {weather.articleCount} incoming global news headlines across your core holdings today.
+          </p>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', marginTop: '30px' }}>
-        <div className="glass-panel delay-3">
-          <h3 style={{ marginBottom: '24px' }}>Historical Performance (Mock)</h3>
-          <div style={{ height: '300px', width: '100%' }}>
-            <ResponsiveContainer>
-              <LineChart data={performanceData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="month" stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                <YAxis hide domain={['dataMin - 5000', 'dataMax + 5000']} />
-                <Tooltip 
-                  contentStyle={{ background: '#0a1f26', border: '1px solid var(--card-border)', borderRadius: '8px' }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="value" 
-                  stroke="var(--accent-primary)" 
-                  strokeWidth={4}
-                  dot={{ fill: 'var(--bg-color)', stroke: 'var(--accent-primary)', strokeWidth: 2, r: 6 }}
-                  activeDot={{ r: 8, fill: 'var(--accent-primary)' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="glass-panel delay-3">
-          <h3 style={{ marginBottom: '24px' }}>Recent Activity</h3>
-          {transactions.length === 0 ? (
-            <p className="text-muted">No transactions found in Database.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {transactions.map(tx => (
-                <div key={tx.id} style={styles.transaction}>
-                  <div>
-                    <p style={{ fontWeight: 500 }}>{tx.description}</p>
-                    <p className="text-xs text-muted" style={{ marginTop: '4px' }}>{tx.date_label}</p>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <p className={Number(tx.amount) > 0 ? 'text-success' : 'text-primary'} style={{ fontWeight: 600 }}>
-                      {Number(tx.amount) > 0 ? '+' : ''}₹{Math.abs(Number(tx.amount)).toLocaleString('en-IN')}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <button className="btn btn-secondary w-full" style={{ marginTop: '24px' }}>View All</button>
+      <div className="glass-panel delay-3" style={{ marginTop: '30px' }}>
+        <h3 style={{ marginBottom: '24px' }}>Historical Portfolio Projection (Algorithm Model)</h3>
+        <div style={{ height: '320px', width: '100%' }}>
+          <ResponsiveContainer>
+            <LineChart data={performanceData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+              <XAxis dataKey="month" stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+              <YAxis hide domain={['dataMin - 5000', 'dataMax + 5000']} />
+              <Tooltip 
+                contentStyle={{ background: '#0a1f26', border: '1px solid var(--card-border)', borderRadius: '8px' }}
+                itemStyle={{ color: '#fff' }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="value" 
+                stroke="var(--accent-primary)" 
+                strokeWidth={4}
+                dot={{ fill: 'var(--bg-color)', stroke: 'var(--accent-primary)', strokeWidth: 2, r: 6 }}
+                activeDot={{ r: 8, fill: 'var(--accent-primary)' }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>
@@ -196,30 +126,9 @@ export default function Dashboard() {
 }
 
 const styles = {
-  input: {
-    width: '100%', padding: '10px 14px', marginTop: '6px', borderRadius: '8px', 
-    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', 
-    color: '#fff', outline: 'none', fontFamily: 'inherit'
-  },
   metricsGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: 'minmax(350px, 1fr) 1fr',
     gap: '30px'
-  },
-  iconBox: {
-    width: '60px',
-    height: '60px',
-    borderRadius: '16px',
-    background: 'rgba(45, 212, 191, 0.1)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  transaction: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: '12px',
-    borderBottom: '1px solid rgba(255,255,255,0.05)'
   }
 };

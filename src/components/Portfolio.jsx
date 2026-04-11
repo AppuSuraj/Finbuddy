@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, YAxis } from 'recharts';
 import { TrendingUp, Layers, Plus, Search, RefreshCw, LayoutGrid, List, ArrowLeft, Newspaper, Info } from 'lucide-react';
 
 const getRelativeTime = (timeProp) => {
@@ -17,19 +17,54 @@ const getRelativeTime = (timeProp) => {
    return 'Just now';
 };
 
+const Sparkline = ({ name }) => {
+  const [data, setData] = useState([]);
+  useEffect(() => {
+     let isMounted = true;
+     const match = name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
+     const ticker = match ? match[1].trim() : name;
+     fetch(`/api/sparkline?symbol=${ticker}.NS`).then(r => r.json()).then(res => {
+        if (!res.error && res.length > 0 && isMounted) setData(res);
+        else {
+           fetch(`/api/sparkline?symbol=${ticker}.BO`).then(r => r.json()).then(r2 => {
+              if (!r2.error && r2.length > 0 && isMounted) setData(r2);
+           });
+        }
+     }).catch(()=>{});
+     return () => isMounted = false;
+  }, [name]);
+  
+  if (data.length === 0) return <div style={{width:'80px', height:'30px'}} />;
+  
+  const isUp = data[data.length-1].close >= data[0].close;
+  const color = isUp ? '#22c55e' : '#ef4444';
+  
+  return (
+    <div style={{ width: '80px', height: '30px' }}>
+      <ResponsiveContainer>
+        <LineChart data={data}>
+          <YAxis hide domain={['dataMin', 'dataMax']} />
+          <Line type="monotone" dataKey="close" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
 export default function Portfolio() {
   const [assetAllocation, setAssetAllocation] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
-  const [newAsset, setNewAsset] = useState({ name: '', value: '', color: '#2dd4bf' });
+  const [newAsset, setNewAsset] = useState({ name: '', value: '', color: '#2dd4bf', buy_price: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Filter/Sort State
+  // Filter/Sort/View State
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('value-desc'); 
   const [viewMode, setViewMode] = useState('list'); // list, table
+  const [chartView, setChartView] = useState('asset'); // asset, sector
 
   // Insights State
   const [selectedAsset, setSelectedAsset] = useState(null);
@@ -56,13 +91,14 @@ export default function Portfolio() {
       { 
         name: newAsset.name, 
         value: Number(newAsset.value), 
-        color: newAsset.color 
+        color: newAsset.color,
+        buy_price: newAsset.buy_price ? Number(newAsset.buy_price) : null
       }
     ]);
 
     if (!error) {
       setShowForm(false);
-      setNewAsset({ name: '', value: '', color: '#2dd4bf' });
+      setNewAsset({ name: '', value: '', color: '#2dd4bf', buy_price: '' });
       fetchAssets(); 
     }
     setIsSubmitting(false);
@@ -113,11 +149,21 @@ export default function Portfolio() {
       if (price === null) {
         price = await fetchPrice(ticker, 'BO'); // Fallback to BSE
       }
+      
+      let sectorStr = asset.sector;
+      if (!sectorStr || sectorStr === 'Unknown' || sectorStr === 'Uncategorized') {
+         try {
+           const profileRes = await fetch(`/api/profile?symbol=${ticker}.NS`);
+           const profile = await profileRes.json();
+           if (profile && profile.sector && profile.sector !== 'Unknown') sectorStr = profile.sector;
+         } catch(e) {}
+      }
 
       if (price !== null) {
         const newVal = price * qty;
         newAllocations[i].value = newVal;
-        await supabase.from('assets').update({ value: newVal }).eq('id', asset.id);
+        newAllocations[i].sector = sectorStr;
+        await supabase.from('assets').update({ value: newVal, sector: sectorStr }).eq('id', asset.id);
         updatedCount++;
       }
     }
@@ -140,12 +186,13 @@ export default function Portfolio() {
 
     try {
       const queryName = encodeURIComponent(asset.name);
-      let res = await fetch(`/api/insights?symbol=${ticker}.NS&name=${queryName}`);
+      const querySector = asset.sector ? `&sector=${encodeURIComponent(asset.sector)}` : '';
+      let res = await fetch(`/api/insights?symbol=${ticker}.NS&name=${queryName}${querySector}`);
       let data = await res.json();
       
       // Fallback logic
       if (data.error || (!data.profile && (!data.news || data.news.length === 0))) {
-         res = await fetch(`/api/insights?symbol=${ticker}.BO&name=${queryName}`);
+         res = await fetch(`/api/insights?symbol=${ticker}.BO&name=${queryName}${querySector}`);
          data = await res.json();
       }
 
@@ -158,7 +205,22 @@ export default function Portfolio() {
 
   const totalValue = assetAllocation.reduce((acc, curr) => acc + Number(curr.value), 0);
 
-  const groupedAssets = useMemo(() => {
+  const getSectorColor = (sector) => {
+    const map = { 'Technology': '#3b82f6', 'Energy': '#eab308', 'Financial Services': '#10b981', 'Healthcare': '#ef4444', 'Industrials': '#f97316', 'Consumer Defensive': '#ec4899', 'Consumer Cyclical': '#d946ef', 'Basic Materials': '#8b5cf6', 'Communication Services': '#0ea5e9', 'Utilities': '#14b8a6', 'Real Estate': '#f43f5e' };
+    return map[sector] || '#64748b';
+  };
+
+  const finalGroupedAssets = useMemo(() => {
+    if (chartView === 'sector') {
+      const sectorMap = {};
+      assetAllocation.forEach(a => {
+         const sec = a.sector || 'Uncategorized';
+         if(!sectorMap[sec]) sectorMap[sec] = { id: sec, name: sec, value: 0, color: getSectorColor(sec), isSector: true };
+         sectorMap[sec].value += Number(a.value);
+      });
+      return Object.values(sectorMap).sort((a,b) => b.value - a.value);
+    }
+    
     if (assetAllocation.length <= 7) return assetAllocation;
     const sorted = [...assetAllocation].sort((a,b) => Number(b.value) - Number(a.value));
     const top = sorted.slice(0, 6);
@@ -167,7 +229,7 @@ export default function Portfolio() {
       ...top,
       { id: 'others', name: 'Other Assets', value: othersValue, color: '#475569', isOther: true }
     ];
-  }, [assetAllocation]);
+  }, [assetAllocation, chartView]);
 
   return (
     <div className="animate-in">
@@ -199,6 +261,10 @@ export default function Portfolio() {
               <input required type="number" value={newAsset.value} onChange={e => setNewAsset({...newAsset, value: e.target.value})} style={styles.input} placeholder="50000" />
             </div>
             <div style={{ flex: 1 }}>
+              <label className="text-xs text-muted">Cost Basis (Buy Price)</label>
+              <input type="number" value={newAsset.buy_price} onChange={e => setNewAsset({...newAsset, buy_price: e.target.value})} style={styles.input} placeholder="Optional P&L Tracker" />
+            </div>
+            <div style={{ flex: 1 }}>
               <label className="text-xs text-muted">Chart Color Hex</label>
               <input required type="text" value={newAsset.color} onChange={e => setNewAsset({...newAsset, color: e.target.value})} style={styles.input} placeholder="#2dd4bf" />
             </div>
@@ -218,14 +284,20 @@ export default function Portfolio() {
       ) : (
         <div style={styles.grid}>
           <div className="glass-panel delay-1">
-            <h3 style={{ marginBottom: '30px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Layers size={20} className="text-secondary" /> Asset Allocation
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '30px' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Layers size={20} className="text-secondary" /> Asset Allocation
+              </h3>
+              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '8px' }}>
+                <button onClick={() => setChartView('asset')} style={{ padding: '6px 12px', background: chartView === 'asset' ? 'var(--accent-primary)' : 'transparent', color: chartView === 'asset' ? '#000' : '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>Assets</button>
+                <button onClick={() => setChartView('sector')} style={{ padding: '6px 12px', background: chartView === 'sector' ? 'var(--accent-primary)' : 'transparent', color: chartView === 'sector' ? '#000' : '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>Sectors</button>
+              </div>
+            </div>
             <div style={{ height: '350px', position: 'relative' }}>
               <ResponsiveContainer>
                 <PieChart>
                   <Pie
-                    data={groupedAssets}
+                    data={finalGroupedAssets}
                     innerRadius={95}
                     outerRadius={125}
                     paddingAngle={3}
@@ -233,14 +305,14 @@ export default function Portfolio() {
                     dataKey="value"
                     stroke="none"
                   >
-                    {groupedAssets.map((entry, index) => (
+                    {finalGroupedAssets.map((entry, index) => (
                       <Cell 
                         key={`cell-${index}`} 
                         fill={entry.color} 
                         onClick={() => {
-                          if (!entry.isOther) handleSelectAsset(entry);
+                          if (!entry.isOther && !entry.isSector) handleSelectAsset(entry);
                         }}
-                        style={{ cursor: entry.isOther ? 'default' : 'pointer', outline: 'none' }}
+                        style={{ cursor: entry.isOther || entry.isSector ? 'default' : 'pointer', outline: 'none' }}
                       />
                     ))}
                   </Pie>
@@ -300,11 +372,23 @@ export default function Portfolio() {
                       <div key={asset.id} style={styles.assetCard} onClick={() => handleSelectAsset(asset)}>
                         <div className="flex items-center gap-4">
                           <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: asset.color }}></div>
-                          <span style={{ fontWeight: 500, fontSize: '18px' }}>{asset.name}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ fontWeight: 500, fontSize: '18px' }}>{asset.name}</span>
+                            <span style={{ fontSize: '12px', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '12px', width: 'fit-content', color: 'var(--text-muted)' }}>
+                               {asset.sector ? `⚡ ${asset.sector}` : 'Sector Uncategorized'}
+                            </span>
+                          </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <p style={{ fontWeight: 600, fontSize: '18px' }}>₹{Number(asset.value).toLocaleString('en-IN')}</p>
-                          <p className="text-muted text-sm">{percentage}% of portfolio</p>
+                          {asset.buy_price ? (
+                            <p className={Number(asset.value) >= Number(asset.buy_price) ? "text-success text-sm" : "text-danger text-sm"}>
+                              {Number(asset.value) >= Number(asset.buy_price) ? '+' : ''}
+                              {(((Number(asset.value) - Number(asset.buy_price)) / Number(asset.buy_price)) * 100).toFixed(1)}% ({percentage}% of port)
+                            </p>
+                          ) : (
+                            <p className="text-muted text-sm">{percentage}% of portfolio</p>
+                          )}
                         </div>
                       </div>
                     );
@@ -315,6 +399,7 @@ export default function Portfolio() {
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                       <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Identifier</th>
+                      <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>7D Trend</th>
                       <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Portfolio Weight</th>
                       <th style={{ padding: '12px 8px', textAlign: 'right', color: 'var(--text-muted)' }}>Market Value</th>
                     </tr>
@@ -324,13 +409,25 @@ export default function Portfolio() {
                       const percentage = totalValue === 0 ? 0 : ((asset.value / totalValue) * 100).toFixed(1);
                       return (
                         <tr key={asset.id} onClick={() => handleSelectAsset(asset)} style={{ cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s', ':hover': { background: 'rgba(255,255,255,0.02)' }}}>
-                          <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: asset.color }}></div>
-                            <span style={{ fontWeight: 500 }}>{asset.name}</span>
+                          <td style={{ padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: asset.color }}></div>
+                              <span style={{ fontWeight: 500 }}>{asset.name}</span>
+                            </div>
+                            <span style={{ fontSize: '11px', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '8px', width: 'fit-content', color: 'var(--text-muted)' }}>
+                               {asset.sector ? `⚡ ${asset.sector}` : 'Sector Uncategorized'}
+                            </span>
                           </td>
+                          <td style={{ padding: '12px 8px' }}><Sparkline name={asset.name} /></td>
                           <td style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>{percentage}%</td>
-                          <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
-                            ₹{Number(asset.value).toLocaleString('en-IN')}
+                          <td style={{ padding: '12px 8px', textAlign: 'right' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'block' }}>₹{Number(asset.value).toLocaleString('en-IN')}</span>
+                            {asset.buy_price && (
+                              <span style={{ fontSize: '12px' }} className={Number(asset.value) >= Number(asset.buy_price) ? "text-success" : "text-danger"}>
+                                {Number(asset.value) >= Number(asset.buy_price) ? '+' : ''}
+                                {(((Number(asset.value) - Number(asset.buy_price)) / Number(asset.buy_price)) * 100).toFixed(1)}% P&L
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );
