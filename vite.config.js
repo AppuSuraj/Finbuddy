@@ -309,18 +309,25 @@ const finbuddyInsightsPlugin = () => ({
                   const industryMatch = html.match(/title="Industry">(.*?)<\/a>/i);
                   const sectorMatch = html.match(/title="Sector">(.*?)<\/a>/i);
                   
-                  const targetStr = (industryMatch ? industryMatch[1] : (sectorMatch ? sectorMatch[1] : '')).trim();
+                  let targetStr = (industryMatch ? industryMatch[1] : (sectorMatch ? sectorMatch[1] : '')).trim();
                   
                   if (targetStr) {
+                     // Decode common HTML entities like &amp;
+                     targetStr = targetStr.replace(/&amp;/g, '&');
+
                      // Fuzzy match to the 58 sectors
-                     const normTarget = targetStr.toLowerCase();
-                     const closest = ALL_SECTORS.find(s => 
-                        normTarget.includes(s.toLowerCase()) || s.toLowerCase().includes(normTarget)
-                     );
+                     const normTarget = targetStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+                     const closest = ALL_SECTORS.find(s => {
+                        const normS = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        return normTarget === normS || normTarget.includes(normS) || normS.includes(normTarget);
+                     });
+
                      if (closest) sector = closest;
-                     else if (targetStr.includes('Defense')) sector = 'Aerospace & Defense';
-                     else if (targetStr.includes('Bank')) sector = 'Banks';
-                     else if (targetStr.includes('IT')) sector = 'IT - Services';
+                     else if (targetStr.toLowerCase().includes('defense')) sector = 'Aerospace & Defense';
+                     else if (targetStr.toLowerCase().includes('bank')) sector = 'Banks';
+                     else if (targetStr.toLowerCase().includes('it')) sector = 'IT - Services';
+                     else if (targetStr.toLowerCase().includes('software')) sector = 'IT - Software';
+                     else if (targetStr.toLowerCase().includes('pharma')) sector = 'Pharmaceuticals & Biotechnology';
                      else sector = targetStr; // Use Screener's string directly as a backup
                   }
                }
