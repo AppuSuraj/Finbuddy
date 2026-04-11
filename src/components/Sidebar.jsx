@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, PieChart, Settings as SettingsIcon, FileUp } from 'lucide-react';
+import { LayoutDashboard, PieChart, Settings as SettingsIcon, FileUp, LogOut } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -35,8 +36,11 @@ export default function Sidebar() {
       </nav>
 
       <div style={styles.footer}>
-        <button className="btn btn-secondary w-full" onClick={() => navigate('/settings')}>
+        <button className="btn btn-secondary w-full" onClick={() => navigate('/settings')} style={{ marginBottom: '12px' }}>
           <SettingsIcon size={18} /> Settings
+        </button>
+        <button className="btn w-full" style={{ background: 'transparent', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => supabase.auth.signOut()}>
+          <LogOut size={18} /> Disconnect
         </button>
       </div>
     </aside>

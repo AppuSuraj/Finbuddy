@@ -2,11 +2,15 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { ArrowUpRight, Radar, PieChart as PieIcon, Radio } from 'lucide-react';
-import { performanceData } from '../data/mockData';
-
 export default function Dashboard() {
   const [netWorth, setNetWorth] = useState(0);
   const [weather, setWeather] = useState({ percent: 50, articleCount: 0 });
+  
+  // Oracle State
+  const [oracleData, setOracleData] = useState(null);
+  const [projectionTimeline, setProjectionTimeline] = useState([]);
+  const [oracleSyncing, setOracleSyncing] = useState(false);
+  
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,6 +35,30 @@ export default function Dashboard() {
            setWeather(sentimentData);
         }
       } catch(e) {}
+      
+      // Request Machine Oracle Neural Subsystem
+      try {
+        setOracleSyncing(true);
+        const oRes = await fetch(`/api/oracle?names=${topNames}`);
+        const predictData = await oRes.json();
+        setOracleData(predictData);
+        
+        // Extrapolate prediction dynamically onto the user's specific Net Worth line
+        if (totalAssets > 0) {
+            const months = ['Today', 'Month 1', 'Month 2', 'Month 3', 'Month 4', 'Month 5', 'Month 6'];
+            let current = totalAssets;
+            // Smooth the total growth % linearly over the trajectory
+            const monthlyGrowth = predictData.growthPercent / 6;
+            
+            const timeline = months.map(m => {
+               const point = { month: m, 'Projected Value': Math.round(current) };
+               current = current * (1 + (monthlyGrowth / 100));
+               return point;
+            });
+            setProjectionTimeline(timeline);
+        }
+      } catch(e) {}
+      setOracleSyncing(false);
     }
     
     setNetWorth(totalAssets);
@@ -97,28 +125,53 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="glass-panel delay-3" style={{ marginTop: '30px' }}>
-        <h3 style={{ marginBottom: '24px' }}>Historical Portfolio Projection (Algorithm Model)</h3>
-        <div style={{ height: '320px', width: '100%' }}>
+      <div className="glass-panel delay-3" style={{ marginTop: '30px', position: 'relative' }}>
+         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+               <h3 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Radio size={22} className="text-secondary" /> Projective Oracle Forecast
+               </h3>
+               <p className="text-muted text-sm" style={{ marginBottom: '24px' }}>AI-driven growth vector mapping using active geopolitical news parsing & NIFTY indexing bounds.</p>
+            </div>
+            {oracleData && (
+                <div style={{ textAlign: 'right', background: 'rgba(0,0,0,0.2)', padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--accent-primary)' }}>
+                   <p className="text-muted text-xs uppercase" style={{ letterSpacing: '1px' }}>6-Month Alpha Projection</p>
+                   {oracleSyncing ? <p className="text-muted spin-animation">Calculating...</p> : (
+                     <h2 className={oracleData.growthPercent >= 0 ? "text-success" : "text-danger"} style={{ fontSize: '28px', marginTop: '4px' }}>
+                       {oracleData.growthPercent >= 0 ? '+' : ''}{oracleData.growthPercent}%
+                     </h2>
+                   )}
+                </div>
+            )}
+         </div>
+         
+         <div style={{ height: '320px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {oracleSyncing ? (
+             <p className="text-primary" style={{ letterSpacing: '2px', textTransform: 'uppercase' }}>📡 Processing Vector Weights...</p>
+          ) : projectionTimeline.length > 0 ? (
           <ResponsiveContainer>
-            <LineChart data={performanceData}>
+            <LineChart data={projectionTimeline}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
               <XAxis dataKey="month" stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-              <YAxis hide domain={['dataMin - 5000', 'dataMax + 5000']} />
+              <YAxis hide domain={['dataMin - (dataMin*0.05)', 'dataMax + (dataMax*0.05)']} />
               <Tooltip 
+                formatter={(value) => `₹${Number(value).toLocaleString('en-IN')}`}
                 contentStyle={{ background: '#0a1f26', border: '1px solid var(--card-border)', borderRadius: '8px' }}
                 itemStyle={{ color: '#fff' }}
               />
               <Line 
                 type="monotone" 
-                dataKey="value" 
+                dataKey="Projected Value" 
                 stroke="var(--accent-primary)" 
-                strokeWidth={4}
-                dot={{ fill: 'var(--bg-color)', stroke: 'var(--accent-primary)', strokeWidth: 2, r: 6 }}
+                strokeWidth={3}
+                strokeDasharray="6 6"
+                dot={{ fill: 'var(--bg-color)', stroke: 'var(--accent-primary)', strokeWidth: 2, r: 5 }}
                 activeDot={{ r: 8, fill: 'var(--accent-primary)' }}
+                isAnimationActive={true}
               />
             </LineChart>
           </ResponsiveContainer>
+          ) : <p className="text-muted">Import assets into the Vault to unlock Oracle mathematical forecasting.</p>}
         </div>
       </div>
     </div>

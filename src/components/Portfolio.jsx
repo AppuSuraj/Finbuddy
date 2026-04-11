@@ -70,6 +70,7 @@ export default function Portfolio() {
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [insightsData, setInsightsData] = useState(null);
   const [fetchingInsights, setFetchingInsights] = useState(false);
+  const [deepScanStates, setDeepScanStates] = useState({});
 
   useEffect(() => {
     fetchAssets();
@@ -135,49 +136,68 @@ export default function Portfolio() {
     let updatedCount = 0;
     const newAllocations = [...assetAllocation];
 
-    for (let i = 0; i < newAllocations.length; i++) {
-      let asset = newAllocations[i];
-      // Regex detects imported convention: "TICKER (10 shares)"
+    // Build a resilient fetch proxy preventing infinite hangs
+    const fetchWithTimeout = async (url, ms = 8000) => {
+       const controller = new AbortController();
+       const id = setTimeout(() => controller.abort(), ms);
+       const response = await fetch(url, { signal: controller.signal });
+       clearTimeout(id);
+       return response;
+    };
+
+    const fetchPriceWithTimeout = async (ticker, suffix) => {
+      try {
+        const res = await fetchWithTimeout(`/api/finance/${ticker}.${suffix}`);
+        const data = await res.json();
+        const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        return price ? Number(price) : null;
+      } catch { return null; }
+    };
+
+    const promises = newAllocations.map(async (asset, i) => {
       const match = asset.name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
-      
-      if (!match) continue; // Skip custom added assets that don't match the format
+      if (!match) return; 
       
       const ticker = match[1].trim();
       const qty = Number(match[2]);
 
-      let price = await fetchPrice(ticker, 'NS');
-      if (price === null) {
-        price = await fetchPrice(ticker, 'BO'); // Fallback to BSE
-      }
-      
+      // Fire price and profile scraping massively parallel
+      let [priceRes, profileRes] = await Promise.allSettled([
+          fetchPriceWithTimeout(ticker, 'NS').then(p => p === null ? fetchPriceWithTimeout(ticker, 'BO') : p),
+          (!asset.sector || asset.sector === 'Unknown' || asset.sector === 'Uncategorized') 
+             ? fetchWithTimeout(`/api/profile?symbol=${ticker}.NS`).then(r => r.json()) 
+             : Promise.resolve({ sector: asset.sector })
+      ]);
+
+      const finalPrice = priceRes.status === 'fulfilled' ? priceRes.value : null;
       let sectorStr = asset.sector;
-      if (!sectorStr || sectorStr === 'Unknown' || sectorStr === 'Uncategorized') {
-         try {
-           const profileRes = await fetch(`/api/profile?symbol=${ticker}.NS`);
-           const profile = await profileRes.json();
-           if (profile && profile.sector && profile.sector !== 'Unknown') sectorStr = profile.sector;
-         } catch(e) {}
+      if (profileRes.status === 'fulfilled' && profileRes.value.sector && profileRes.value.sector !== 'Unknown') {
+          sectorStr = profileRes.value.sector;
       }
 
-      if (price !== null) {
-        const newVal = price * qty;
+      if (finalPrice !== null) {
+        const newVal = finalPrice * qty;
         newAllocations[i].value = newVal;
         newAllocations[i].sector = sectorStr;
         await supabase.from('assets').update({ value: newVal, sector: sectorStr }).eq('id', asset.id);
         updatedCount++;
       }
-    }
+    });
+
+    // Wait for all 20+ connections to clear (or timeout at 8s)
+    await Promise.allSettled(promises);
     
-    setAssetAllocation(newAllocations);
+    setAssetAllocation([...newAllocations]);
     setRefreshing(false);
-    if (updatedCount > 0) alert(`Successfully updated ${updatedCount} assets via Live Markets!`);
-    else alert('No valid stock tickers identified. Make sure they were imported via Smart Import.');
+    if (updatedCount > 0) alert(`Successfully synced ${updatedCount} assets dynamically via Parallel Market Oracle!`);
+    else alert('Oracle Timeout or no valid stock tickers identified.');
   };
 
   const handleSelectAsset = async (asset) => {
     setSelectedAsset(asset);
     setFetchingInsights(true);
     setInsightsData(null);
+    setDeepScanStates({});
     
     // Parse ticker name
     const match = asset.name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
@@ -451,7 +471,7 @@ export default function Portfolio() {
           style={{ 
             position: 'fixed', inset: 0, zIndex: 50, 
             display: 'flex', alignItems: 'center', justifyContent: 'center', 
-            background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(8px)', padding: '20px' 
+            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(24px)', padding: '20px' 
           }}
           onClick={() => setSelectedAsset(null)}
         >
@@ -459,7 +479,8 @@ export default function Portfolio() {
             className="glass-panel" 
             style={{ 
               width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', 
-              padding: '40px', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', border: '1px solid var(--accent-primary)' 
+              padding: '40px', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', 
+              border: '1px solid var(--accent-primary)', background: 'rgba(10, 25, 30, 0.95)'
             }}
             onClick={e => e.stopPropagation()}
             className="vault-scroll"
@@ -548,21 +569,44 @@ export default function Portfolio() {
                  </h3>
 
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                   {insightsData.news && insightsData.news.length > 0 ? insightsData.news.map((item, idx) => (
-                     <a key={idx} href={item.link} target="_blank" rel="noreferrer" className="glass-panel" style={{ padding: '20px', display: 'block', textDecoration: 'none', color: 'inherit', background: 'rgba(0,0,0,0.1)', borderLeft: item.sentimentGrade === 'Positive' ? '4px solid #22c55e' : item.sentimentGrade === 'Negative' ? '4px solid #ef4444' : '4px solid #94a3b8' }}>
+                   {insightsData.news && insightsData.news.length > 0 ? insightsData.news.map((item, idx) => {
+                     const isDeepScanned = deepScanStates[idx];
+                     const finalGrade = isDeepScanned ? item.deepSentimentGrade : item.sentimentGrade;
+                     return (
+                     <div key={idx} className="glass-panel" style={{ padding: '20px', display: 'block', background: 'rgba(0,0,0,0.1)', borderLeft: finalGrade === 'Positive' ? '4px solid #22c55e' : finalGrade === 'Negative' ? '4px solid #ef4444' : '4px solid #94a3b8' }}>
                        <div className="flex justify-between items-start gap-4" style={{ marginBottom: '8px' }}>
-                         <p className="font-semibold" style={{ fontSize: '17px', lineHeight: '1.4' }}>{item.title}</p>
-                         <span style={{ 
-                           padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap',
-                           background: item.sentimentGrade === 'Positive' ? 'rgba(34,197,94,0.1)' : item.sentimentGrade === 'Negative' ? 'rgba(239,68,68,0.1)' : 'rgba(148,163,184,0.1)',
-                           color: item.sentimentGrade === 'Positive' ? '#4ade80' : item.sentimentGrade === 'Negative' ? '#f87171' : '#cbd5e1'
-                         }}>
-                           {item.sentimentGrade === 'Positive' ? '🟢 Positive' : item.sentimentGrade === 'Negative' ? '🔴 Negative' : '⚪ Neutral'}
-                         </span>
+                         <a href={item.link} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
+                           <p className="font-semibold hover-text-primary transition-colors" style={{ fontSize: '17px', lineHeight: '1.4' }}>{item.title}</p>
+                         </a>
+                         <div className="flex gap-2 items-center">
+                           {!isDeepScanned && (
+                             <button onClick={() => setDeepScanStates(prev => ({...prev, [idx]: true}))} className="hover-scale" style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap' }}>
+                               🔬 Deep Scan
+                             </button>
+                           )}
+                           <span style={{ 
+                             padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap',
+                             background: finalGrade === 'Positive' ? 'rgba(34,197,94,0.1)' : finalGrade === 'Negative' ? 'rgba(239,68,68,0.1)' : 'rgba(148,163,184,0.1)',
+                             color: finalGrade === 'Positive' ? '#4ade80' : finalGrade === 'Negative' ? '#f87171' : '#cbd5e1'
+                           }}>
+                             {finalGrade === 'Positive' ? '🟢 Positive' : finalGrade === 'Negative' ? '🔴 Negative' : '⚪ Neutral'}
+                           </span>
+                         </div>
                        </div>
-                       <p className="text-xs text-muted">{item.publisher} • {getRelativeTime(item.providerPublishTime)}</p>
-                     </a>
-                   )) : <p className="text-muted text-center" style={{ padding: '30px' }}>No recent news articles logged for this specific asset.</p>}
+                       
+                       {isDeepScanned && (
+                          <div className="animate-in" style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', margin: '14px 0', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <p className="text-sm text-secondary" style={{ marginBottom: '8px', letterSpacing: '0.5px' }}><strong>DEEP NLP ANALYSIS:</strong></p>
+                            <p className="text-sm" style={{ lineHeight: '1.5', color: '#cbd5e1' }}>{item.contentSnippet}</p>
+                            <p className="text-xs text-muted" style={{ marginTop: '12px', fontVariantNumeric: 'tabular-nums' }}>
+                               Base Score: {item.baseScore} | Adjusted Heuristic Score: {item.deepScore}
+                            </p>
+                          </div>
+                       )}
+
+                       <p className="text-xs text-muted mt-2">{item.publisher} • {getRelativeTime(item.providerPublishTime)}</p>
+                     </div>
+                   )}) : <p className="text-muted text-center" style={{ padding: '30px' }}>No recent news articles logged for this specific asset.</p>}
                  </div>
                </div>
              ) : null}

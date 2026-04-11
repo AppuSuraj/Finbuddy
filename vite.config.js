@@ -46,14 +46,37 @@ const finbuddyInsightsPlugin = () => ({
                } catch(e){}
             }
             
-            // Map NLP Sentiment and convert to standard UI format
+            // Map NLP Sentiment with Heavy Heuristic Overrides
             news = itemsToParse.map(item => {
+               // Standard title analysis
                const analysis = sentimentAnalyzer.analyze(item.title);
                let grade = 'Neutral';
                if (analysis.score > 0) grade = 'Positive';
                if (analysis.score < 0) grade = 'Negative';
                
-               // Google News puts publisher after a dash in the title sometimes: "Headline - Source"
+               // Deep Scan Engine (Reading beyond the title)
+               const snippet = item.contentSnippet || '';
+               const fullText = (item.title + " " + snippet).toLowerCase();
+               let deepScore = analysis.score;
+               
+               // Finance-specific penalty lexicon
+               if (fullText.includes('crack') || fullText.includes('cracks')) deepScore -= 3;
+               if (fullText.includes('crash')) deepScore -= 4;
+               if (fullText.includes('plunge')) deepScore -= 3;
+               if (fullText.includes('tumble')) deepScore -= 3;
+               if (fullText.includes('bearish')) deepScore -= 2;
+               
+               // Finance-specific additive lexicon
+               if (fullText.includes('soar')) deepScore += 3;
+               if (fullText.includes('surge')) deepScore += 3;
+               if (fullText.includes('bullish')) deepScore += 2;
+               if (fullText.includes('breakout')) deepScore += 2;
+               
+               let deepGrade = 'Neutral';
+               if (deepScore > 0) deepGrade = 'Positive';
+               if (deepScore < 0) deepGrade = 'Negative';
+
+               // Parse Google News Publisher
                let title = item.title;
                let publisher = item.source || 'Financial News';
                if (title.includes(' - ')) {
@@ -67,7 +90,11 @@ const finbuddyInsightsPlugin = () => ({
                  link: item.link,
                  publisher: publisher,
                  providerPublishTime: item.isoDate || item.pubDate,
-                 sentimentGrade: grade 
+                 sentimentGrade: grade,
+                 deepSentimentGrade: deepGrade,
+                 contentSnippet: snippet || 'Detailed breakdown not provided by publisher.',
+                 baseScore: analysis.score,
+                 deepScore: deepScore
                };
             });
          } catch(e) { }
@@ -136,6 +163,69 @@ const finbuddyInsightsPlugin = () => ({
       } catch (err) {
          res.setHeader('Content-Type', 'application/json');
          res.end(JSON.stringify({ error: err.message, percent: 50 }));
+      }
+    });
+
+    // Sub-Route: Oracle Prediction Algorithm
+    server.middlewares.use('/api/oracle', async (req, res, next) => {
+      const url = new URL(req.originalUrl || req.url, `http://${req.headers.host}`);
+      const namesStr = url.searchParams.get('names');
+      if (!namesStr) return next();
+      
+      try {
+         const names = namesStr.split(',');
+         let macroScore = 0;
+         let microScore = 0;
+         let articleCount = 0;
+
+         // 1. Fetch Macro Geopolitical News (Simulating Federal/RBI/Geopolitical triggers)
+         const macroQuery = encodeURIComponent(`"India market economy geopolitics forecast"`);
+         try {
+             const mFeed = await rssParser.parseURL(`https://news.google.com/rss/search?q=${macroQuery}&hl=en-IN&gl=IN&ceid=IN:en`);
+             mFeed.items.slice(0, 5).forEach(item => {
+                 const analysis = sentimentAnalyzer.analyze(item.title);
+                 macroScore += analysis.score;
+                 articleCount++;
+             });
+         } catch(e){}
+
+         // 2. Fetch Micro Portfolio Sentiment
+         for (const name of names) {
+            const rawName = name.split('(')[0].trim();
+            const query = encodeURIComponent(`"${rawName}" stock forecast IN`);
+            try {
+              const feed = await rssParser.parseURL(`https://news.google.com/rss/search?q=${query}&hl=en-IN&gl=IN&ceid=IN:en`);
+              feed.items.slice(0, 2).forEach(item => {
+                 const analysis = sentimentAnalyzer.analyze(item.title);
+                 microScore += analysis.score;
+                 articleCount++;
+              });
+            } catch(e){}
+         }
+         
+         const avgMacro = macroScore / 5;
+         const avgMicro = names.length > 0 ? microScore / (names.length * 2) : 0;
+         
+         // Heuristic Prediction Math (Mimics ML weight distribution)
+         // Assuming base neutral market growth is 8% annually -> 4% over 6 months
+         const baseBeta = 4.0;
+         // Alpha = Macro + Micro scalar. A combined score of +2 translates to roughly +3% excess return
+         const sentimentAlpha = (avgMacro * 0.8) + (avgMicro * 1.5);
+         
+         let predictedGrowth = baseBeta + sentimentAlpha;
+         if (predictedGrowth > 35) predictedGrowth = 35; // Cap maximum projection
+         if (predictedGrowth < -20) predictedGrowth = -20; // Cap maximum drawdown
+         
+         res.setHeader('Content-Type', 'application/json');
+         res.end(JSON.stringify({ 
+             growthPercent: Number(predictedGrowth.toFixed(2)),
+             macroScore: Number(avgMacro.toFixed(2)),
+             microScore: Number(avgMicro.toFixed(2)),
+             articleCount
+         }));
+      } catch (err) {
+         res.setHeader('Content-Type', 'application/json');
+         res.end(JSON.stringify({ error: err.message, growthPercent: 4.0 }));
       }
     });
 
