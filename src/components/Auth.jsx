@@ -13,9 +13,15 @@ export default function Auth() {
     setLoading(true);
     try {
        if (isSignUp) {
-           const { error } = await supabase.auth.signUp({ email, password });
+           const { error } = await supabase.auth.signUp({ 
+               email, 
+               password,
+               options: {
+                   emailRedirectTo: window.location.origin
+               }
+           });
            if (error) alert(error.message);
-           else alert("Registration successful! You can now sign in.");
+           else alert("Registration successful! Please check your email and click the confirmation link to activate your terminal.");
        } else {
            const { error } = await supabase.auth.signInWithPassword({ email, password });
            if (error) alert(error.message);
