@@ -19,6 +19,7 @@ function App() {
   // Dashboard data — fetched once after login, never reset on navigation
   const [dashboardData, setDashboardData] = useState(null);   // null = not yet fetched
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [brokerFilter, setBrokerFilter] = useState('All'); // All, Zerodha, Groww
 
   // ── Auth ──
   useEffect(() => {
@@ -141,9 +142,11 @@ function App() {
                 data={dashboardData}
                 loading={dashboardLoading}
                 onRefresh={() => { setDashboardData(null); }}
+                brokerFilter={brokerFilter}
+                onBrokerFilterChange={setBrokerFilter}
               />
             } />
-            <Route path="/portfolio" element={<Portfolio session={session} onPortfolioChange={() => setDashboardData(null)} />} />
+            <Route path="/portfolio" element={<Portfolio session={session} onPortfolioChange={() => setDashboardData(null)} brokerFilter={brokerFilter} onBrokerFilterChange={setBrokerFilter} />} />
             <Route path="/settings" element={<Settings session={session} />} />
             <Route path="/import" element={<Importer session={session} onImportComplete={() => setDashboardData(null)} />} />
             <Route path="/admin" element={<AdminConsole session={session} />} />

@@ -70,7 +70,7 @@ export default function AdminConsole({ session }) {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '30px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '30px' }}>
         <div className="glass-panel" style={{ padding: '24px' }}>
           <div className="flex items-center gap-3 text-muted text-sm mb-2">
             <Users size={16} /> TOTAL AUTHORIZED EMAILS
@@ -88,6 +88,52 @@ export default function AdminConsole({ session }) {
             <Clock size={16} /> SYSTEM UPTIME
           </div>
           <h2 style={{ fontSize: '32px' }}>99.9%</h2>
+        </div>
+        <div className="glass-panel" style={{ padding: '24px', border: '1px solid var(--accent-primary)', background: 'rgba(45,212,191,0.03)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3 text-muted text-sm">
+                <RefreshCw size={16} /> DATA INTEGRITY
+            </div>
+          </div>
+          <button 
+            className="btn btn-primary" 
+            style={{ width: '100%', padding: '12px', fontSize: '12px' }}
+            onClick={async () => {
+              if(!confirm("REPAIR PROTOCOL: This will scan all user portfolios and auto-assign Brokers/Tickers to legacy data. Proceed?")) return;
+              
+              const { data: assets } = await supabase.from('assets').select('*');
+              if(!assets) return;
+
+              let repairCount = 0;
+              for(const asset of assets) {
+                let updates = {};
+                
+                // 1. Detect Broker if missing
+                if(!asset.broker) {
+                  const isGroww = asset.name.includes(' LTD') || asset.name.includes(' LIMITED') || asset.name.includes(' INDUSTRIES') || asset.name.includes(' SERVICES');
+                  updates.broker = isGroww ? 'Groww' : 'Zerodha';
+                }
+
+                // 2. Resolve Ticker if name isn't standardized
+                const hasParens = asset.name.includes('(') && asset.name.includes('shares)');
+                if(!hasParens) {
+                  // Legacy name format - likely just the name or ticker
+                  const qty = 1; // We don't know the exact qty from names easily if missing parens
+                  const nameParts = asset.name.split(' ');
+                  const ticker = nameParts[0].toUpperCase().replace(/[^A-Z0-9&]/g,'');
+                  updates.name = `${ticker} (${qty} shares)`;
+                }
+
+                if(Object.keys(updates).length > 0) {
+                  await supabase.from('assets').update(updates).eq('id', asset.id);
+                  repairCount++;
+                }
+              }
+              alert(`REPAIR COMPLETE: Re-optimized ${repairCount} assets across all terminals.`);
+            }}
+          >
+            Run Repair Script
+          </button>
         </div>
       </div>
 

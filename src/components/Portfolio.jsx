@@ -7,55 +7,49 @@ const SECTORS = [
   'Aerospace & Defense', 'Agricultural Food & other Products', 'Agricultural, Commercial & Construction Vehicles', 'Auto Components', 'Automobiles', 'Banks', 'Beverages', 'Capital Markets', 'Cement & Cement Products', 'Chemicals & Petrochemicals', 'Cigarettes & Tobacco Products', 'Commercial Services & Supplies', 'Construction', 'Consumable Fuels', 'Consumer Durables', 'Diversified', 'Diversified FMCG', 'Diversified Metals', 'Electrical Equipment', 'Engineering Services', 'Entertainment', 'Ferrous Metals', 'Fertilizers & Agrochemicals', 'Finance', 'Financial Technology (Fintech)', 'Food Products', 'Gas', 'Healthcare Equipment & Supplies', 'Healthcare Services', 'Household Products', 'Industrial Manufacturing', 'Industrial Products', 'Insurance', 'IT - Hardware', 'IT - Services', 'IT - Software', 'Leisure Services', 'Media', 'Metals & Minerals Trading', 'Minerals & Mining', 'Non - Ferrous Metals', 'Oil', 'Other Construction Materials', 'Other Consumer Services', 'Other Utilities', 'Paper, Forest & Jute Products', 'Personal Products', 'Petroleum Products', 'Pharmaceuticals & Biotechnology', 'Power', 'Printing & Publication', 'Realty', 'Retailing', 'Telecom - Equipment & Accessories', 'Telecom - Services', 'Textiles & Apparels', 'Transport Infrastructure', 'Transport Services', 'Uncategorized'
 ];
 
-const getRelativeTime = (timeProp) => {
-   if (!timeProp) return 'Unknown Date';
-   const date = new Date(timeProp);
-   if (isNaN(date.getTime())) return 'Invalid Date';
-   
-   const diffMs = new Date() - date;
-   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-   const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-   
-   if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-   if (diffHrs > 0) return `${diffHrs} hour${diffHrs > 1 ? 's' : ''} ago`;
-   return 'Just now';
-};
+export default function Portfolio({ session, onPortfolioChange, brokerFilter, onBrokerFilterChange }) {
+  const smartResolveTicker = (rawName) => {
+    if (!rawName) return '';
+    let name = String(rawName).toUpperCase().trim();
+    const suffixes = [' LTD', ' LIMITED', ' CORP', ' INC', ' REITY', ' INFRA', ' CO', ' INDUSTRIES', ' SERVICES', ' ENTERPRISES'];
+    suffixes.forEach(s => {
+      if (name.includes(s)) name = name.substring(0, name.indexOf(s)).trim();
+    });
+    const mappings = { 'HDFC BANK': 'HDFCBANK', 'TATA POWER': 'TATAPOWER', 'KOTAK MAHINDRA BANK': 'KOTAKBANK', 'ICICI BANK': 'ICICIBANK', 'ADANI ENTERPRISES': 'ADANIENT' };
+    if (mappings[name]) return mappings[name];
+    if (name.includes('(')) name = name.split('(')[0].trim();
+    return name.split(' ')[0].replace(/[^A-Z0-9&]/g, '');
+  };
 
-const Sparkline = ({ name }) => {
-  const [data, setData] = useState([]);
-  useEffect(() => {
-     let isMounted = true;
-     const match = name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
-     const ticker = match ? match[1].trim() : name;
-     fetch(`/api/sparkline?symbol=${ticker}.NS`).then(r => r.json()).then(res => {
-        if (!res.error && res.length > 0 && isMounted) setData(res);
-        else {
-           fetch(`/api/sparkline?symbol=${ticker}.BO`).then(r => r.json()).then(r2 => {
-              if (!r2.error && r2.length > 0 && isMounted) setData(r2);
-           });
-        }
-     }).catch(()=>{});
-     return () => isMounted = false;
-  }, [name]);
-  
-  if (data.length === 0) return <div style={{width:'80px', height:'30px'}} />;
-  
-  const isUp = data[data.length-1].close >= data[0].close;
-  const color = isUp ? '#22c55e' : '#ef4444';
-  
-  return (
-    <div style={{ width: '80px', height: '30px' }}>
-      <ResponsiveContainer>
-        <LineChart data={data}>
-          <YAxis hide domain={['dataMin', 'dataMax']} />
-          <Line type="monotone" dataKey="close" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-};
-
-export default function Portfolio({ session }) {
+  const Sparkline = ({ name }) => {
+    const [data, setData] = useState([]);
+    useEffect(() => {
+       let isMounted = true;
+       const ticker = smartResolveTicker(name);
+       fetch(`/api/sparkline?symbol=${ticker}.NS`).then(r => r.json()).then(res => {
+          if (!res.error && res.length > 0 && isMounted) setData(res);
+          else {
+             fetch(`/api/sparkline?symbol=${ticker}.BO`).then(r => r.json()).then(r2 => {
+                if (!r2.error && r2.length > 0 && isMounted) setData(r2);
+             });
+          }
+       }).catch(()=>{});
+       return () => isMounted = false;
+    }, [name]);
+    
+    if (data.length === 0) return <div style={{width:'80px', height:'30px'}} />;
+    const isUp = data[data.length-1].close >= data[0].close;
+    return (
+      <div style={{ width: '80px', height: '30px' }}>
+        <ResponsiveContainer>
+          <LineChart data={data}>
+            <YAxis hide domain={['dataMin', 'dataMax']} />
+            <Line type="monotone" dataKey="close" stroke={isUp ? '#22c55e' : '#ef4444'} strokeWidth={2} dot={false} isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  };
   const getScrutinySummary = (data) => {
     if (!data) return null;
     let summary = "";
@@ -158,7 +152,11 @@ export default function Portfolio({ session }) {
 
   // Engine for Sorting & Filtering
   const filteredAndSortedAssets = useMemo(() => {
-    let result = assetAllocation.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    let result = assetAllocation.filter(a => {
+      const matchesSearch = a.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesBroker = brokerFilter === 'All' || a.broker === brokerFilter;
+      return matchesSearch && matchesBroker;
+    });
     
     // Apply Sector Filter if active
     if (selectedSectorFilter) {
@@ -223,11 +221,11 @@ export default function Portfolio({ session }) {
     }
     
     const promises = targetAllocations.map(async (asset, i) => {
-      const match = asset.name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
-      if (!match) return; 
-      
-      const ticker = match[1].trim();
-      const qty = Number(match[2]);
+      const ticker = smartResolveTicker(asset.name);
+      if (!ticker) return;
+
+      const qtyMatch = asset.name.match(/\((\d+(?:\.\d+)?)\s*shares\)/i);
+      const qty = qtyMatch ? Number(qtyMatch[1]) : 1;
 
       // Fire price and profile scraping massively parallel
       let [priceRes, profileRes] = await Promise.allSettled([
@@ -273,8 +271,7 @@ export default function Portfolio({ session }) {
       return;
     }
 
-    const match = asset.name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
-    const ticker = match ? match[1].trim() : asset.name.split('(')[0].trim();
+    const ticker = smartResolveTicker(asset.name);
     setDeepScrutinyData(null);
     setDeepScrutinyLoading(true);
     try {
@@ -302,9 +299,7 @@ export default function Portfolio({ session }) {
     setIsEditingSector(false);
     
     // Parse ticker name
-    const match = asset.name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
-    let ticker = asset.name;
-    if (match) ticker = match[1].trim();
+    const ticker = smartResolveTicker(asset.name);
 
     try {
       const queryName = encodeURIComponent(asset.name);
@@ -383,7 +378,24 @@ export default function Portfolio({ session }) {
           <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>Investment Portfolio</h1>
           <p className="text-muted">Track and analyze your live wealth allocation.</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
+          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', padding: '4px', borderRadius: '12px', display: 'flex', gap: '4px' }}>
+            {['All', 'Zerodha', 'Groww'].map(m => (
+              <button
+                key={m}
+                onClick={() => onBrokerFilterChange(m)}
+                style={{
+                  padding: '8px 16px', borderRadius: '9px', fontSize: '11px', fontWeight: 700, border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                  background: brokerFilter === m ? (m === 'Zerodha' ? '#0ea5e9' : m === 'Groww' ? '#10b981' : 'var(--accent-primary)') : 'transparent',
+                  color: brokerFilter === m ? '#041014' : 'rgba(255,255,255,0.5)',
+                  boxShadow: brokerFilter === m ? '0 4px 12px rgba(0,0,0,0.2)' : 'none'
+                }}
+              >
+                {m.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
           <button 
             className="btn btn-secondary" 
             onClick={handleRefreshLivePrices} 

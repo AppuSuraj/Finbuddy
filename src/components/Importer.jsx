@@ -6,16 +6,57 @@ import { FileUp, CheckCircle, AlertCircle, Trash2, FileText, LayoutGrid } from '
 
 const COLORS = ['#2dd4bf', '#0ea5e9', '#f59e0b', '#8b5cf6', '#ef4444', '#10b981'];
 
-export default function Importer({ session }) {
+export default function Importer({ session, onImportComplete }) {
   const [data, setData] = useState([]);
   const [csvType, setCsvType] = useState('none'); // none, stocks, bank, transactions
   const [status, setStatus] = useState('idle'); // idle, parsing, uploading, done, error
+  const [importBroker, setImportBroker] = useState('Zerodha');
 
   const cleanNumber = (val) => {
     if (val === null || val === undefined) return 0;
     if (typeof val === 'number') return val;
     const cleaned = String(val).replace(/[^0-9.-]/g, '');
     return Number(cleaned) || 0;
+  };
+
+  const smartResolveTicker = (rawName) => {
+    if (!rawName) return '';
+    let name = String(rawName).toUpperCase().trim();
+    
+    // Pattern: Removing common corporate suffixes
+    const suffixes = [' LTD', ' LIMITED', ' CORP', ' INC', ' REITY', ' INFRA', ' CO', ' CORP', ' INDUSTRIES', ' SERVICES', ' ENTERPRISES'];
+    suffixes.forEach(s => {
+      if (name.endsWith(s)) name = name.substring(0, name.lastIndexOf(s)).trim();
+    });
+
+    // Handle common mappings that don't match exactly
+    const mappings = {
+      'HDFC BANK': 'HDFCBANK',
+      'TATA POWER': 'TATAPOWER',
+      'KOTAK MAHINDRA BANK': 'KOTAKBANK',
+      'ICICI BANK': 'ICICIBANK',
+      'ADANI ENTERPRISES': 'ADANIENT',
+      'ADANI PORTS AND SPECIAL ECONOMIC ZONE': 'ADANIPORTS',
+      'ADANI PORTS': 'ADANIPORTS',
+      'TATA CONSULTANCY SERVICES': 'TCS',
+      'MAHINDRA & MAHINDRA': 'M&M',
+      'LARSEN & TOUBRO': 'LT',
+      'RELIANCE INDUSTRIES': 'RELIANCE',
+      'STATE BANK OF INDIA': 'SBIN',
+      'HOUSING DEVELOPMENT FINANCE CORP': 'HDFC',
+      'AXIS BANK': 'AXISBANK',
+      'BAJAJ FINANCE': 'BAJFINANCE',
+      'BHARTI AIRTEL': 'BHARTIARTL',
+      'POWER GRID CORP OF INDIA': 'POWERGRID',
+      'ULTRATECH CEMENT': 'ULTRACEMCO',
+      'SUN PHARMACEUTICAL INDUSTRIES': 'SUNPHARMA',
+      'HINDUSTAN UNILEVER': 'HINDUNILVR'
+    };
+
+    if (mappings[name]) return mappings[name];
+
+    // Fallback: Remove special chars and spaces
+    return name.split(' ')[0].replace(/[^A-Z0-9&]/g, '');
   };
 
   const normalizeRow = (row, index) => {
@@ -32,37 +73,39 @@ export default function Importer({ session }) {
 
     if (!rawName) return null;
 
+    const ticker = smartResolveTicker(rawName);
+
     return {
-      name: `${rawName} (${qty} shares)`,
+      name: `${ticker} (${qty} shares)`,
       value: curVal || 0,
       buy_price: buyPrice || null,
-      color: COLORS[index % COLORS.length]
+      color: COLORS[index % COLORS.length],
+      broker: importBroker // Use current selected broker
     };
   };
 
-  const processData = (jsonData) => {
+  const processData = (jsonData, detectedExtension) => {
     if (!jsonData || jsonData.length === 0) {
       setStatus('error');
       return;
     }
 
+    // Auto-detect broker based on headers
+    const sampleKeysStr = Object.keys(jsonData[0]).join(' ').toLowerCase();
+    if (sampleKeysStr.includes('stock name')) setImportBroker('Groww');
+    else if (sampleKeysStr.includes('instrument')) setImportBroker('Zerodha');
+    else if (detectedExtension === 'xlsx') setImportBroker('Groww');
+
     // Attempt to find a row that looks like a header if the first row fails normalization logic
-    let startIdx = 0;
-    const sampleRow = jsonData[0];
-    const sampleKeysStr = Object.keys(sampleRow).join(' ').toLowerCase();
-    
-    // Heuristic: If row 1 looks like metadata (less than 2 stock-like keys), skip it and try to find a header
     const stockKeywords = ['instrument', 'stock name', 'quantity', 'avg', 'closing'];
     const matchCount = stockKeywords.filter(k => sampleKeysStr.includes(k)).length;
 
     let finalRows = jsonData;
     if (matchCount < 2) {
-      // Look deeper (up to 20 rows) for a header row in case of Groww-style metadata
       for (let i = 0; i < Math.min(jsonData.length, 20); i++) {
         const rowValues = Object.values(jsonData[i]).map(v => String(v).toLowerCase());
         const rowMatchCount = stockKeywords.filter(k => rowValues.some(rv => rv.includes(k))).length;
         if (rowMatchCount >= 2) {
-          // Found header! Use this row as keys for subsequent rows
           const headers = Object.values(jsonData[i]);
           finalRows = jsonData.slice(i + 1).map(r => {
             const obj = {};
@@ -101,7 +144,7 @@ export default function Importer({ session }) {
         header: true,
         skipEmptyLines: true,
         complete: function (results) {
-          processData(results.data);
+          processData(results.data, 'csv');
         },
         error: function() { setStatus('error'); }
       });
@@ -113,21 +156,24 @@ export default function Importer({ session }) {
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        
-        // Convert array of arrays to array of objects using first actual looking row as header if needed
-        // but let processData handle the complex detection
         const objects = data.map(row => {
           const obj = {};
           row.forEach((cell, idx) => { obj[`col_${idx}`] = cell; });
           return obj;
         });
-        processData(objects);
+        processData(objects, 'xlsx');
       };
       reader.onerror = () => setStatus('error');
       reader.readAsBinaryString(file);
     } else {
       setStatus('error');
     }
+  };
+
+  // When broker toggle changes in preview, update all data
+  const handleBrokerChange = (newBroker) => {
+    setImportBroker(newBroker);
+    setData(prev => prev.map(row => ({ ...row, broker: newBroker })));
   };
 
   const handleRemoveRow = (index) => {
@@ -138,7 +184,6 @@ export default function Importer({ session }) {
     if (data.length === 0) return;
     setStatus('uploading');
     
-    // Inject user_id into each object so multi-tenancy works
     const dataWithUser = data.map(item => ({
       ...item,
       user_id: session.user.id
@@ -153,6 +198,7 @@ export default function Importer({ session }) {
       setStatus('done');
       setData([]);
       setCsvType('none');
+      if (onImportComplete) onImportComplete();
     }
   };
 
@@ -161,7 +207,7 @@ export default function Importer({ session }) {
       <div className="page-header">
         <div>
           <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>Smart Importer 2.0</h1>
-          <p className="text-muted">Multi-broker support for Zerodha, Groww, and custom Excel/CSV formats.</p>
+          <p className="text-muted">High-fidelity multi-broker data ingestion engine.</p>
         </div>
       </div>
 
@@ -170,7 +216,7 @@ export default function Importer({ session }) {
           <LayoutGrid size={20} /> Smart Import Guide
         </h3>
         <p style={{ fontSize: '14px', lineHeight: '1.6', marginBottom: '16px' }}>
-          Upload your **Holdings Report** from any major broker. We automatically detect headers like "Instrument", "Stock Name", "Average Buy Price", and "Closing Value".
+          Upload your **Holdings Report**. We automatically extracttickers and values. If you've already imported some stocks, this will add to your existing portfolio.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '8px' }}>
@@ -201,12 +247,32 @@ export default function Importer({ session }) {
         
         {data.length > 0 && status !== 'uploading' && status !== 'done' && (
           <div style={{ marginTop: '20px', padding: '20px', background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '12px', textAlign: 'left' }}>
-            <h3 style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FileText size={18} color="var(--accent-primary)" />
-                Preview Assets 
-                <span className="text-muted text-sm" style={{marginLeft:'8px'}}>({data.length} holdings identified)</span>
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <FileText size={18} color="var(--accent-primary)" />
+                  Preview Assets 
+                  <span className="text-muted text-sm" style={{marginLeft:'8px'}}>({data.length} holdings)</span>
+                </h3>
+              </div>
+              
+              <div style={{ background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '10px', display: 'flex', gap: '4px' }}>
+                {['Zerodha', 'Groww'].map(b => (
+                  <button 
+                    key={b}
+                    onClick={() => handleBrokerChange(b)}
+                    style={{ 
+                      padding: '6px 16px', borderRadius: '8px', fontSize: '12px', border: 'none', cursor: 'pointer',
+                      background: importBroker === b ? b === 'Zerodha' ? '#0ea5e9' : '#10b981' : 'transparent',
+                      color: importBroker === b ? '#fff' : 'rgba(255,255,255,0.4)',
+                      fontWeight: 600, transition: 'all 0.2s'
+                    }}
+                  >
+                    {b}
+                  </button>
+                ))}
+              </div>
+
               <button 
                 className="btn btn-primary" 
                 onClick={handleSyncToSupabase}
@@ -214,13 +280,13 @@ export default function Importer({ session }) {
               >
                 Sync to My Portfolio
               </button>
-            </h3>
+            </div>
             
             <div style={{ maxHeight: '400px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                    <th style={{ padding: '12px 10px', color: 'var(--text-muted)', fontSize: '12px', textTransform: 'uppercase' }}>Asset Details</th>
+                    <th style={{ padding: '12px 10px', color: 'var(--text-muted)', fontSize: '12px', textTransform: 'uppercase' }}>Asset Details (Market Resolved)</th>
                     <th style={{ padding: '12px 10px', color: 'var(--text-muted)', fontSize: '12px', textTransform: 'uppercase' }}>Purchase Price</th>
                     <th style={{ padding: '12px 10px', color: 'var(--text-muted)', fontSize: '12px', textTransform: 'uppercase' }}>Market Value</th>
                     <th style={{ padding: '12px 10px', textAlign: 'right' }}>Actions</th>
@@ -232,6 +298,7 @@ export default function Importer({ session }) {
                       <td style={{ padding: '14px 10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ minWidth: '8px', height: '8px', borderRadius: '50%', background: row.color }}></div>
                         <span style={{ fontWeight: 500, fontSize: '14px' }}>{row.name}</span>
+                        <span style={{ fontSize: '10px', background: row.broker === 'Zerodha' ? 'rgba(14,165,233,0.15)' : 'rgba(16,185,129,0.15)', color: row.broker === 'Zerodha' ? '#0ea5e9' : '#10b981', padding: '1px 6px', borderRadius: '6px', fontWeight: 600 }}>{row.broker}</span>
                       </td>
                       <td style={{ padding: '14px 10px', fontSize: '14px', color: 'rgba(255,255,255,0.6)' }}>
                         {row.buy_price ? `₹${row.buy_price.toLocaleString('en-IN')}` : 'N/A'}

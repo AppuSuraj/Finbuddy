@@ -39,7 +39,7 @@ const STEPS = [
 ];
 
 // Dashboard is now a pure rendering component — all data fetching lives in App.jsx
-export default function Dashboard({ session, data, loading, onRefresh }) {
+export default function Dashboard({ session, data, loading, onRefresh, brokerFilter, onBrokerFilterChange }) {
   const navigate = useNavigate();
   const [expandedStock, setExpandedStock] = useState(null);
   const [alphaBase, setAlphaBase] = useState('Nifty50');
@@ -60,11 +60,16 @@ export default function Dashboard({ session, data, loading, onRefresh }) {
   }
 
   const { assets = [], netWorth = 0, weather = { percent: 50, articleCount: 0 }, oracleData, projectionTimeline = [], intelligenceData, analyticsData } = data;
-  const hasAssets = assets.length > 0;
+  
+  // ── Broker Filtering Logic ──
+  const filteredAssets = assets.filter(a => brokerFilter === 'All' || a.broker === brokerFilter);
+  const hasAssets = filteredAssets.length > 0;
+  
+  const currentNetWorth = filteredAssets.reduce((acc, a) => acc + Number(a.value || 0), 0);
+  const totalBuyValue = filteredAssets.reduce((acc, a) => acc + (a.buy_price ? Number(a.buy_price) : 0), 0);
+  const pnl = totalBuyValue > 0 ? currentNetWorth - totalBuyValue : null;
+  
   const sentimentColor = weather.percent > 65 ? '#2dd4bf' : weather.percent < 45 ? '#ef4444' : '#eab308';
-
-  const totalBuyValue = assets.reduce((acc, a) => acc + (a.buy_price ? Number(a.buy_price) : 0), 0);
-  const pnl = totalBuyValue > 0 ? netWorth - totalBuyValue : null;
 
   const gaugeData = [
     { name: 'Score', value: weather.percent, fill: sentimentColor },
@@ -105,12 +110,32 @@ export default function Dashboard({ session, data, loading, onRefresh }) {
               : 'Welcome to your financial intelligence terminal. Follow the setup guide to get started.'}
           </p>
         </div>
-        <button
-          onClick={onRefresh}
-          title="Refresh Dashboard Data"
-          style={{ background: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)', color: 'var(--accent-primary)', padding: '8px 12px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', flexShrink: 0 }}>
-          <RefreshCw size={14} /> Refresh
-        </button>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          {/* Broker Switcher */}
+          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', padding: '4px', borderRadius: '12px', display: 'flex', gap: '4px' }}>
+            {['All', 'Zerodha', 'Groww'].map(m => (
+              <button
+                key={m}
+                onClick={() => onBrokerFilterChange(m)}
+                style={{
+                  padding: '8px 16px', borderRadius: '9px', fontSize: '11px', fontWeight: 700, border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                  background: brokerFilter === m ? (m === 'Zerodha' ? '#0ea5e9' : m === 'Groww' ? '#10b981' : 'var(--accent-primary)') : 'transparent',
+                  color: brokerFilter === m ? '#041014' : 'rgba(255,255,255,0.5)',
+                  boxShadow: brokerFilter === m ? '0 4px 12px rgba(0,0,0,0.2)' : 'none'
+                }}
+              >
+                {m.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={onRefresh}
+            title="Refresh Dashboard Data"
+            style={{ background: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)', color: 'var(--accent-primary)', padding: '10px 16px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600 }}>
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
       {hasAssets ? (
@@ -118,9 +143,9 @@ export default function Dashboard({ session, data, loading, onRefresh }) {
           {/* KPI Row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '28px' }}>
             {[
-              { label: 'Total Portfolio Value', value: `₹${netWorth.toLocaleString('en-IN')}`, sub: 'Active Wealth Exposure', color: '#2dd4bf', icon: TrendingUp },
-              { label: 'Total Assets', value: assets.length, sub: 'Holdings in Vault', color: '#0ea5e9', icon: BarChart2 },
-              { label: 'Sector Coverage', value: [...new Set(assets.map(a => a.sector).filter(Boolean))].length, sub: 'Unique SEBI Sectors', color: '#8b5cf6', icon: Radar },
+              { label: 'Total Portfolio Value', value: `₹${currentNetWorth.toLocaleString('en-IN')}`, sub: `${brokerFilter} Wealth Exposure`, color: brokerFilter === 'Zerodha' ? '#0ea5e9' : brokerFilter === 'Groww' ? '#10b981' : '#2dd4bf', icon: TrendingUp },
+              { label: 'Total Assets', value: filteredAssets.length, sub: 'Holdings in Vault', color: '#0ea5e9', icon: BarChart2 },
+              { label: 'Sector Coverage', value: [...new Set(filteredAssets.map(a => a.sector).filter(Boolean))].length, sub: 'Unique SEBI Sectors', color: '#8b5cf6', icon: Radar },
               ...(pnl !== null ? [{ label: 'Unrealised P&L', value: `${pnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(pnl)).toLocaleString('en-IN')}`, sub: pnl >= 0 ? 'Net Gain' : 'Net Loss', color: pnl >= 0 ? '#10b981' : '#ef4444', icon: ArrowUpRight }] : []),
             ].map((kpi, i) => (
               <div key={i} className="glass-panel" style={{ padding: '20px', position: 'relative', overflow: 'hidden' }}>
