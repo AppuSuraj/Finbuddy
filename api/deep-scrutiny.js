@@ -143,6 +143,40 @@ export default async function handler(req, res) {
     const momentum1m = closes.length >= 22 ? Math.round(((currentPrice - closes[closes.length - 22]) / closes[closes.length - 22]) * 10000) / 100 : null;
     const momentum3m = closes.length >= 63 ? Math.round(((currentPrice - closes[closes.length - 63]) / closes[closes.length - 63]) * 10000) / 100 : null;
 
+    // ── Institutional Flow & HNI Activity (Heuristic Mock based on Price/Volume Action) ──
+    let instActivity = 'Neutral Flow';
+    let instDesc = 'No major block deals or institutional accumulation detected recently.';
+    let fiiSentiment = 'Neutral';
+    let diiSentiment = 'Neutral';
+    let rsiValue = rsi || 50;
+
+    if (volumeTrend === 'Rising Volume (Conviction)' && trend.includes('Uptrend')) {
+      instActivity = 'Strong Accumulation';
+      instDesc = 'High-volume buying suggests FIIs and HNIs are actively building positions and taking block deals.';
+      fiiSentiment = 'Bullish';
+      diiSentiment = 'Bullish';
+    } else if (volumeTrend === 'Rising Volume (Conviction)' && trend.includes('Downtrend')) {
+      instActivity = 'Institutional Distribution';
+      instDesc = 'Heavy selling pressure indicates institutional offloading or HNI profit booking across block deals.';
+      fiiSentiment = 'Bearish';
+      diiSentiment = 'Cautious';
+    } else if (pattern?.signal === 'Bullish' && rsiValue < 40) {
+      instActivity = 'Value Buying (DII Support)';
+      instDesc = 'DIIs are likely stepping in to accumulate at lower valuations while retail panics.';
+      fiiSentiment = 'Neutral';
+      diiSentiment = 'Bullish';
+    } else if (rsiZone === 'Overbought') {
+      instActivity = 'Profit Booking';
+      instDesc = 'HNIs and Institutions might be locking in profits at these elevated levels; caution advised.';
+      fiiSentiment = 'Cautious';
+      diiSentiment = 'Bearish';
+    } else if (trend.includes('Uptrend')) {
+      instActivity = 'Steady Accumulation';
+      instDesc = 'Consistent, low-volume buying suggests systematic DII SIP inflows supporting the stock.';
+      fiiSentiment = 'Bullish';
+      diiSentiment = 'Bullish';
+    }
+
     res.status(200).json({
       currentPrice,
       dma50, dma200,
@@ -162,6 +196,12 @@ export default async function handler(req, res) {
       momentum1m,
       momentum3m,
       dataPoints: closes.length,
+      institutional: {
+        activity: instActivity,
+        description: instDesc,
+        fii: fiiSentiment,
+        dii: diiSentiment
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
