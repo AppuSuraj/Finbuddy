@@ -8,6 +8,18 @@ const SECTORS = [
 ];
 
 export default function Portfolio({ session, onPortfolioChange, brokerFilter, onBrokerFilterChange }) {
+  const getRelativeTime = (timestamp) => {
+    if (!timestamp) return 'Just now';
+    const ms = Date.now() - (Number(timestamp) * 1000);
+    const minutes = Math.floor(ms / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return 'Just now';
+  };
+
   const smartResolveTicker = (rawName) => {
     if (!rawName) return '';
     let name = String(rawName).toUpperCase().trim();
@@ -630,14 +642,13 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
           onClick={() => setSelectedAsset(null)}
         >
           <div 
-            className="glass-panel" 
             style={{ 
               width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', 
               padding: '40px', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', 
               border: '1px solid var(--accent-primary)', background: 'rgba(10, 25, 30, 0.95)'
             }}
             onClick={e => e.stopPropagation()}
-            className="vault-scroll"
+            className="vault-scroll glass-panel"
           >
              <div className="flex justify-between items-center" style={{ marginBottom: '24px' }}>
                 <h2 style={{ fontSize: '32px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
