@@ -65,15 +65,17 @@ function App() {
     const oracleNames = encodeURIComponent(sorted.slice(0, 5).map(a => a.name.split('(')[0].trim()).join(','));
 
     // Start all heavy API calls in parallel
-    const [sentimentRes, oracleRes] = await Promise.allSettled([
+    const [sentimentRes, oracleRes, analyticsRes] = await Promise.allSettled([
       fetch(`/api/portfolio-sentiment?names=${isAdmin ? top10Names : top4Names}${isAdmin ? '&deep=true' : ''}`),
       fetch(`/api/oracle?names=${oracleNames}`),
+      fetch('/api/analytics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assets: sorted }) })
     ]);
 
     let weather = { percent: 50, articleCount: 0 };
     let intelligenceData = null;
     let oracleData = null;
     let projectionTimeline = [];
+    let analyticsData = null;
 
     if (sentimentRes.status === 'fulfilled' && sentimentRes.value.ok) {
       const s = await sentimentRes.value.json();
@@ -106,7 +108,11 @@ function App() {
       });
     }
 
-    setDashboardData({ assets: assetData, netWorth: total, weather, oracleData, projectionTimeline, intelligenceData });
+    if (analyticsRes.status === 'fulfilled' && analyticsRes.value.ok) {
+      analyticsData = await analyticsRes.value.json();
+    }
+
+    setDashboardData({ assets: assetData, netWorth: total, weather, oracleData, projectionTimeline, intelligenceData, analyticsData });
     setDashboardLoading(false);
   }, []);
 

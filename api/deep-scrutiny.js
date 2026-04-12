@@ -102,6 +102,7 @@ export default async function handler(req, res) {
 
     // ── RSI ──
     const rsi = computeRSI(closes.slice(-30));
+    const rsiZone = rsi ? (rsi > 70 ? 'Overbought' : rsi < 30 ? 'Oversold' : 'Neutral') : null;
 
     // ── Bollinger Bands ──
     const bollinger = computeBollingerBands(closes);

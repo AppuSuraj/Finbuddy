@@ -42,6 +42,7 @@ const STEPS = [
 export default function Dashboard({ session, data, loading, onRefresh }) {
   const navigate = useNavigate();
   const [expandedStock, setExpandedStock] = useState(null);
+  const [alphaBase, setAlphaBase] = useState('Nifty50');
 
   const email = session?.user?.email || '';
   const isAdmin = email.toLowerCase() === 'surajsan1998@gmail.com';
@@ -58,7 +59,7 @@ export default function Dashboard({ session, data, loading, onRefresh }) {
     );
   }
 
-  const { assets = [], netWorth = 0, weather = { percent: 50, articleCount: 0 }, oracleData, projectionTimeline = [], intelligenceData } = data;
+  const { assets = [], netWorth = 0, weather = { percent: 50, articleCount: 0 }, oracleData, projectionTimeline = [], intelligenceData, analyticsData } = data;
   const hasAssets = assets.length > 0;
   const sentimentColor = weather.percent > 65 ? '#2dd4bf' : weather.percent < 45 ? '#ef4444' : '#eab308';
 
@@ -130,6 +131,77 @@ export default function Dashboard({ session, data, loading, onRefresh }) {
               </div>
             ))}
           </div>
+
+          {/* ── Investor Upgrade Suite ── */}
+          {analyticsData && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) 2fr', gap: '20px', marginBottom: '28px' }}>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Health Grade Card */}
+                <div className="glass-panel" style={{ padding: '24px', borderTop: `4px solid ${analyticsData.health.color}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                    <ShieldCheck size={24} color={analyticsData.health.color} />
+                    <h3 style={{ margin: 0, fontSize: '18px' }}>Health Grade</h3>
+                    <span style={{ marginLeft: 'auto', fontSize: '24px', fontWeight: 800, color: analyticsData.health.color }}>{analyticsData.health.grade}</span>
+                  </div>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff', margin: '0 0 4px' }}>{analyticsData.health.riskFactor}</p>
+                  <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: 1.5 }}>{analyticsData.health.correctionTip}</p>
+                </div>
+
+                {/* Passive Income Card */}
+                <div className="glass-panel" style={{ padding: '24px', background: 'linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(45,212,191,0.05) 100%)', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                    <TrendingUp size={24} color="#10b981" />
+                    <h3 style={{ margin: 0, fontSize: '18px' }}>Passive Income</h3>
+                  </div>
+                  <h2 style={{ fontSize: '28px', margin: '0 0 4px', color: '#10b981', fontWeight: 700 }}>₹{analyticsData.dividends.annual.toLocaleString('en-IN')} <span style={{fontSize: '14px', color: 'rgba(255,255,255,0.5)', fontWeight: 500}}>/ yr</span></h2>
+                  <p style={{ fontSize: '13px', color: '#fff', margin: '0 0 12px' }}>That is <strong style={{color: '#10b981'}}>₹{analyticsData.dividends.monthly.toLocaleString('en-IN')}</strong> per month.</p>
+                  <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: 1.5 }}>Congratulations! Financial independence is driven by cash flow. You are steadily building your passive wealth engine.</p>
+                </div>
+              </div>
+
+              {/* Alpha Chart */}
+              <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                  <div>
+                    <h3 style={{ margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '8px' }}><Activity size={18} className="text-secondary" /> Alpha Tracking</h3>
+                    <p className="text-muted" style={{ fontSize: '12px', margin: 0 }}>1-Year Relative Performance: Portfolio vs Market</p>
+                  </div>
+                  <select 
+                    value={alphaBase} 
+                    onChange={e => setAlphaBase(e.target.value)}
+                    style={{ background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', outline: 'none' }}
+                  >
+                    <option value="Nifty50">vs NIFTY 50</option>
+                    <option value="Sensex">vs SENSEX</option>
+                  </select>
+                </div>
+                
+                <div style={{ flex: 1, minHeight: '220px', position: 'relative' }}>
+                  {analyticsData.alphaData && analyticsData.alphaData.length > 0 ? (
+                    <ResponsiveContainer>
+                      <LineChart data={analyticsData.alphaData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                        <XAxis dataKey="date" stroke="rgba(255,255,255,0.2)" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} axisLine={false} tickLine={false} minTickGap={30} />
+                        <YAxis tickFormatter={v => `${v}%`} stroke="rgba(255,255,255,0.2)" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                        <Tooltip
+                          formatter={(v) => [`${v}%`, '']}
+                          contentStyle={{ background: '#0a1f26', border: '1px solid rgba(45,212,191,0.2)', borderRadius: '10px' }}
+                          labelStyle={{ color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}
+                          itemStyle={{ fontSize: '13px', padding: '2px 0' }}
+                        />
+                        <Line type="monotone" name="Portfolio" dataKey="Portfolio" stroke="var(--accent-primary)" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                        <Line type="monotone" name={alphaBase === 'Nifty50' ? 'NIFTY 50' : 'SENSEX'} dataKey={alphaBase} stroke="rgba(255,255,255,0.3)" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={{ r: 4 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-muted" style={{ textAlign: 'center', marginTop: '80px' }}>Loading historical market data...</p>
+                  )}
+                </div>
+              </div>
+              
+            </div>
+          )}
 
           {/* Sentiment + Oracle */}
           <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', marginBottom: '28px' }}>
