@@ -84,6 +84,7 @@ export default function Importer({ session }) {
 
   return (
     <div className="animate-in">
+      <div className="page-header">
         <div>
           <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>Smart Importer</h1>
           <p className="text-muted">High-fidelity classification for Stocks & Portfolio Data.</p>
