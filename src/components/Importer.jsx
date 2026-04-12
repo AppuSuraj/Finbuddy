@@ -60,15 +60,24 @@ export default function Importer({ session, onImportComplete }) {
   };
 
   const normalizeRow = (headers, rowValues, index, activeBroker) => {
-    const getVal = (possibleHeaders) => {
-      const idx = headers.findIndex(h => h && possibleHeaders.includes(String(h).trim().toLowerCase()));
+    const fuzzyMatch = (header, keywords) => {
+      if (!header) return false;
+      const h = String(header).trim().toLowerCase();
+      return keywords.some(k => {
+        const kw = String(k).toLowerCase();
+        return h.includes(kw) || kw.includes(h);
+      });
+    };
+
+    const getVal = (possibleKeywords) => {
+      const idx = headers.findIndex(h => fuzzyMatch(h, possibleKeywords));
       return idx !== -1 ? rowValues[idx] : null;
     };
 
-    const rawName = getVal(['instrument', 'stock name', 'name', 'symbol', 'security', 'scrip name', 'scrip', 'company name']);
-    const qty = cleanNumber(getVal(['qty.', 'quantity', 'qty', 'shares', 'units', 'stock qty']));
-    const curVal = cleanNumber(getVal(['cur. val', 'closing value', 'current value', 'market value', 'total value', 'invested value', 'buy value']));
-    const buyPrice = cleanNumber(getVal(['avg. cost', 'average buy price', 'buy price', 'average price', 'avg price', 'purchase price']));
+    const rawName = getVal(['instrument', 'stock name', 'name', 'symbol', 'security', 'scrip', 'company']);
+    const qty = cleanNumber(getVal(['qty', 'quantity', 'shares', 'units', 'stock qty', 'balance']));
+    const curVal = cleanNumber(getVal(['cur. val', 'closing', 'current value', 'market value', 'total value', 'invested value', 'buy value', 'ltp']));
+    const buyPrice = cleanNumber(getVal(['avg', 'average', 'buy price', 'cost', 'purchase', 'buy rate']));
 
     if (!rawName) return null;
 
@@ -89,23 +98,23 @@ export default function Importer({ session, onImportComplete }) {
       return;
     }
 
-    const stockKeywords = ['instrument', 'stock name', 'quantity', 'qty', 'avg', 'closing', 'current value', 'invested', 'buy value', 'isin'];
+    const stockKeywords = ['instrument', 'stock name', 'quantity', 'qty', 'avg', 'closing', 'current value', 'invested', 'buy value', 'isin', 'symbol', 'security', 'scrip'];
     let headerRowIdx = -1;
     let activeBroker = importBroker;
 
-    // Scan up to 50 rows for a header row
-    for (let i = 0; i < Math.min(grid.length, 50); i++) {
+    // Scan up to 100 rows for a header row (more resilient for reports with huge metadata)
+    for (let i = 0; i < Math.min(grid.length, 100); i++) {
       const row = grid[i];
       if (!Array.isArray(row)) continue;
       
       const rowValues = row.map(v => String(v || '').toLowerCase());
-      const rowMatchCount = stockKeywords.filter(k => rowValues.some(rv => rv.includes(k))).length;
+      const rowMatchCount = stockKeywords.filter(k => rowValues.some(rv => rv.includes(k) || k.includes(rv))).length;
       
       if (rowMatchCount >= 2) {
         headerRowIdx = i;
         const headerStr = rowValues.join(' ');
-        if (headerStr.includes('stock name')) activeBroker = 'Groww';
-        else if (headerStr.includes('instrument')) activeBroker = 'Zerodha';
+        if (headerStr.includes('stock name') || headerStr.includes('groww')) activeBroker = 'Groww';
+        else if (headerStr.includes('instrument') || headerStr.includes('zerodha') || headerStr.includes('kite')) activeBroker = 'Zerodha';
         else if (detectedExtension === 'xlsx') activeBroker = 'Groww';
         break;
       }
@@ -155,19 +164,20 @@ export default function Importer({ session, onImportComplete }) {
     } else if (fileExt === 'xlsx' || fileExt === 'xls') {
       const reader = new FileReader();
       reader.onload = (evt) => {
-        const bstr = evt.target.result;
+        const data = evt.target.result;
         try {
-          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wb = XLSX.read(data, { type: 'array' });
           const wsname = wb.SheetNames[0];
           const ws = wb.Sheets[wsname];
           const grid = XLSX.utils.sheet_to_json(ws, { header: 1 });
           processData(grid, 'xlsx');
         } catch (err) {
+          console.error("XLSX Parse Error:", err);
           setStatus('error');
         }
       };
       reader.onerror = () => setStatus('error');
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
     } else {
       setStatus('error');
     }
