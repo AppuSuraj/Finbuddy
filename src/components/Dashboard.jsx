@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { ArrowUpRight, Radar, Radio, Zap, BarChart2, ShieldCheck, FileUp, ArrowRight, TrendingUp, Activity } from 'lucide-react';
+import { ArrowUpRight, Radar, Radio, Zap, BarChart2, ShieldCheck, FileUp, ArrowRight, TrendingUp, Activity, Lock, Newspaper, ChevronDown, ChevronUp } from 'lucide-react';
 
 const MARKET_PULSE = [
   { label: 'NIFTY 50', value: '24,315.85', change: '+0.68%', up: true },
@@ -44,6 +44,8 @@ export default function Dashboard({ session }) {
   const [assets, setAssets] = useState([]);
   const [netWorth, setNetWorth] = useState(0);
   const [weather, setWeather] = useState({ percent: 50, articleCount: 0 });
+  const [intelligenceData, setIntelligenceData] = useState(null); // Premium deep breakdown
+  const [expandedStock, setExpandedStock] = useState(null);
   const [oracleData, setOracleData] = useState(null);
   const [projectionTimeline, setProjectionTimeline] = useState([]);
   const [oracleSyncing, setOracleSyncing] = useState(false);
@@ -63,13 +65,29 @@ export default function Dashboard({ session }) {
       setAssets(assetData);
 
       const sorted = [...assetData].sort((a, b) => Number(b.value) - Number(a.value));
-      const topNames = sorted.slice(0, 4).map(a => encodeURIComponent(a.name.split('(')[0].trim())).join(',');
 
-      try {
-        const res = await fetch(`/api/portfolio-sentiment?names=${topNames}`);
-        const s = await res.json();
-        if (s && typeof s.percent === 'number') setWeather(s);
-      } catch (e) {}
+      // Premium: Top 10 deep analysis for admin. Standard: Top 4 for free users.
+      const top10Names = sorted.slice(0, 10).map(a => encodeURIComponent(a.name.split('(')[0].trim())).join(',');
+      const top4Names = sorted.slice(0, 4).map(a => encodeURIComponent(a.name.split('(')[0].trim())).join(',');
+
+      if (isAdmin) {
+        // Deep mode — full top-10 breakdown with per-stock headlines
+        try {
+          const res = await fetch(`/api/portfolio-sentiment?names=${top10Names}&deep=true`);
+          const s = await res.json();
+          if (s && typeof s.percent === 'number') {
+            setWeather({ percent: s.percent, articleCount: s.articleCount });
+            if (s.breakdown) setIntelligenceData(s.breakdown);
+          }
+        } catch (e) {}
+      } else {
+        // Standard mode — top 4 overview only
+        try {
+          const res = await fetch(`/api/portfolio-sentiment?names=${top4Names}`);
+          const s = await res.json();
+          if (s && typeof s.percent === 'number') setWeather(s);
+        } catch (e) {}
+      }
 
       try {
         setOracleSyncing(true);
@@ -220,7 +238,7 @@ export default function Dashboard({ session }) {
                 </div>
               </div>
               <p className="text-muted" style={{ fontSize: '11px', textAlign: 'center', marginTop: '20px', lineHeight: 1.5 }}>
-                Analysis of <strong style={{ color: sentimentColor }}>{weather.articleCount}</strong> global news headlines across your core holdings.
+                Analysis of <strong style={{ color: sentimentColor }}>{weather.articleCount}</strong> global news headlines across your top {isAdmin ? '10' : '4'} holdings.
               </p>
             </div>
 
@@ -275,6 +293,86 @@ export default function Dashboard({ session }) {
                   <p className="text-muted" style={{ textAlign: 'center', marginTop: '80px' }}>No data yet.</p>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* ── Premium Intelligence Panel ── */}
+          <div style={{ position: 'relative', marginBottom: '28px' }}>
+            {!isAdmin && (
+              // Premium Gate Overlay
+              <div style={{
+                position: 'absolute', inset: 0, zIndex: 10,
+                background: 'rgba(4, 16, 20, 0.75)',
+                backdropFilter: 'blur(8px)',
+                borderRadius: '16px',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                border: '1px solid rgba(45,212,191,0.2)',
+              }}>
+                <Lock size={32} style={{ color: 'var(--accent-primary)' }} />
+                <h3 style={{ margin: 0, fontSize: '18px' }}>Premium Intelligence</h3>
+                <p className="text-muted" style={{ fontSize: '13px', margin: 0, textAlign: 'center', maxWidth: '280px' }}>
+                  Deep Sentiment Analysis of your top 10 holdings is a Premium feature.
+                </p>
+                <button className="btn btn-primary" style={{ padding: '9px 22px', fontSize: '13px', marginTop: '4px' }}>
+                  Upgrade to Premium
+                </button>
+              </div>
+            )}
+
+            <div className="glass-panel" style={{ padding: '24px', filter: isAdmin ? 'none' : 'blur(2px)', pointerEvents: isAdmin ? 'auto' : 'none', minHeight: '200px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <Newspaper size={18} style={{ color: 'var(--accent-primary)' }} />
+                <h3 style={{ margin: 0, fontSize: '16px' }}>Deep Intelligence: Top 10 Holdings</h3>
+                <span style={{ marginLeft: 'auto', fontSize: '11px', background: 'var(--accent-gradient)', color: '#041014', padding: '2px 10px', borderRadius: '20px', fontWeight: 700 }}>PREMIUM</span>
+              </div>
+
+              {intelligenceData && intelligenceData.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {intelligenceData.map((stock, i) => {
+                    const sc = stock.percent > 65 ? '#10b981' : stock.percent < 45 ? '#ef4444' : '#eab308';
+                    const isExpanded = expandedStock === stock.name;
+                    return (
+                      <div key={i} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '10px', overflow: 'hidden', border: `1px solid ${sc}22` }}>
+                        <div
+                          onClick={() => setExpandedStock(isExpanded ? null : stock.name)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', cursor: 'pointer' }}
+                        >
+                          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', width: '20px', flexShrink: 0 }}>#{i + 1}</span>
+                          <span style={{ fontWeight: 600, fontSize: '14px', flex: 1 }}>{stock.name}</span>
+                          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{stock.articleCount} articles</span>
+                          {/* Mini bar */}
+                          <div style={{ width: '80px', height: '6px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', flexShrink: 0 }}>
+                            <div style={{ width: `${stock.percent}%`, height: '100%', background: sc, borderRadius: '4px', transition: 'width 0.6s ease' }} />
+                          </div>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: sc, width: '38px', textAlign: 'right', flexShrink: 0 }}>{stock.percent}%</span>
+                          <span style={{ fontSize: '11px', background: `${sc}22`, color: sc, padding: '2px 8px', borderRadius: '12px', fontWeight: 600, width: '58px', textAlign: 'center', flexShrink: 0 }}>{stock.sentiment}</span>
+                          {isExpanded ? <ChevronUp size={14} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} /> : <ChevronDown size={14} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />}
+                        </div>
+
+                        {isExpanded && stock.headlines && stock.headlines.length > 0 && (
+                          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '12px 16px 12px 48px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {stock.headlines.map((h, j) => (
+                              <div key={j} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                <span style={{ fontSize: '10px', background: h.score > 0 ? 'rgba(16,185,129,0.15)' : h.score < 0 ? 'rgba(239,68,68,0.15)' : 'rgba(234,179,8,0.15)', color: h.score > 0 ? '#10b981' : h.score < 0 ? '#ef4444' : '#eab308', padding: '2px 7px', borderRadius: '8px', fontWeight: 600, flexShrink: 0, marginTop: '2px' }}>
+                                  {h.score > 0 ? '▲' : h.score < 0 ? '▼' : '●'}
+                                </span>
+                                <div>
+                                  <p style={{ fontSize: '12px', margin: '0 0 2px', lineHeight: 1.4, color: 'rgba(255,255,255,0.8)' }}>{h.title}</p>
+                                  <p style={{ fontSize: '10px', margin: 0, color: 'rgba(255,255,255,0.3)' }}>{h.publisher}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>
+                  {isAdmin ? 'Loading intelligence data...' : 'Premium analysis locked.'}
+                </div>
+              )}
             </div>
           </div>
         </>
