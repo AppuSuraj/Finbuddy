@@ -59,17 +59,16 @@ export default function Importer({ session, onImportComplete }) {
     return name.split(' ')[0].replace(/[^A-Z0-9&]/g, '');
   };
 
-  const normalizeRow = (row, index, activeBroker) => {
-    const keys = Object.keys(row);
+  const normalizeRow = (headers, rowValues, index, activeBroker) => {
     const getVal = (possibleHeaders) => {
-      const foundKey = keys.find(k => k && possibleHeaders.includes(k.trim().toLowerCase()));
-      return row[foundKey];
+      const idx = headers.findIndex(h => h && possibleHeaders.includes(String(h).trim().toLowerCase()));
+      return idx !== -1 ? rowValues[idx] : null;
     };
 
-    const rawName = getVal(['instrument', 'stock name', 'name', 'symbol', 'security', 'scrip name']);
-    const qty = cleanNumber(getVal(['qty.', 'quantity', 'qty', 'shares', 'units']));
-    const curVal = cleanNumber(getVal(['cur. val', 'closing value', 'current value', 'market value', 'total value']));
-    const buyPrice = cleanNumber(getVal(['avg. cost', 'average buy price', 'buy price', 'average price', 'avg price']));
+    const rawName = getVal(['instrument', 'stock name', 'name', 'symbol', 'security', 'scrip name', 'scrip', 'company name']);
+    const qty = cleanNumber(getVal(['qty.', 'quantity', 'qty', 'shares', 'units', 'stock qty']));
+    const curVal = cleanNumber(getVal(['cur. val', 'closing value', 'current value', 'market value', 'total value', 'invested value', 'buy value']));
+    const buyPrice = cleanNumber(getVal(['avg. cost', 'average buy price', 'buy price', 'average price', 'avg price', 'purchase price']));
 
     if (!rawName) return null;
 
@@ -80,61 +79,56 @@ export default function Importer({ session, onImportComplete }) {
       value: curVal || 0,
       buy_price: buyPrice || null,
       color: COLORS[index % COLORS.length],
-      broker: activeBroker // Use the passed broker, not state
+      broker: activeBroker
     };
   };
 
-  const processData = (jsonData, detectedExtension) => {
-    if (!jsonData || jsonData.length === 0) {
+  const processData = (grid, detectedExtension) => {
+    if (!grid || grid.length === 0) {
       setStatus('error');
       return;
     }
 
-    // Auto-detect broker based on headers (initially)
-    let activeBroker = importBroker; 
-    const sampleKeysStr = Object.keys(jsonData[0]).join(' ').toLowerCase();
-    
-    if (sampleKeysStr.includes('stock name')) activeBroker = 'Groww';
-    else if (sampleKeysStr.includes('instrument')) activeBroker = 'Zerodha';
-    else if (detectedExtension === 'xlsx') activeBroker = 'Groww';
+    const stockKeywords = ['instrument', 'stock name', 'quantity', 'qty', 'avg', 'closing', 'current value', 'invested', 'buy value', 'isin'];
+    let headerRowIdx = -1;
+    let activeBroker = importBroker;
 
-    // Attempt to find a row that looks like a header if the first row fails normalization logic
-    const stockKeywords = ['instrument', 'stock name', 'quantity', 'avg', 'closing'];
-    const matchCount = stockKeywords.filter(k => sampleKeysStr.includes(k)).length;
-
-    let finalRows = jsonData;
-    if (matchCount < 2) {
-      for (let i = 0; i < Math.min(jsonData.length, 20); i++) {
-        const rowValues = Object.values(jsonData[i]).map(v => String(v).toLowerCase());
-        const rowMatchCount = stockKeywords.filter(k => rowValues.some(rv => rv.includes(k))).length;
-        if (rowMatchCount >= 2) {
-          const headers = Object.values(jsonData[i]);
-          
-          // Re-evaluate broker based on actual header row
-          const headerStr = headers.join(' ').toLowerCase();
-          if (headerStr.includes('stock name')) activeBroker = 'Groww';
-          else if (headerStr.includes('instrument')) activeBroker = 'Zerodha';
-
-          finalRows = jsonData.slice(i + 1).map(r => {
-            const obj = {};
-            Object.values(r).forEach((v, idx) => { if (headers[idx]) obj[headers[idx]] = v; });
-            return obj;
-          });
-          break;
-        }
+    // Scan up to 50 rows for a header row
+    for (let i = 0; i < Math.min(grid.length, 50); i++) {
+      const row = grid[i];
+      if (!Array.isArray(row)) continue;
+      
+      const rowValues = row.map(v => String(v || '').toLowerCase());
+      const rowMatchCount = stockKeywords.filter(k => rowValues.some(rv => rv.includes(k))).length;
+      
+      if (rowMatchCount >= 2) {
+        headerRowIdx = i;
+        const headerStr = rowValues.join(' ');
+        if (headerStr.includes('stock name')) activeBroker = 'Groww';
+        else if (headerStr.includes('instrument')) activeBroker = 'Zerodha';
+        else if (detectedExtension === 'xlsx') activeBroker = 'Groww';
+        break;
       }
     }
 
-    setImportBroker(activeBroker); // Update state for UI
+    if (headerRowIdx === -1) {
+      setStatus('error');
+      return;
+    }
 
-    const parsedAssets = finalRows
-      .map((row, i) => normalizeRow(row, i, activeBroker))
+    setImportBroker(activeBroker);
+
+    const headers = grid[headerRowIdx];
+    const dataRows = grid.slice(headerRowIdx + 1);
+
+    const parsedAssets = dataRows
+      .map((row, i) => normalizeRow(headers, row, i, activeBroker))
       .filter(asset => asset !== null && asset.value > 0);
 
     if (parsedAssets.length > 0) {
       setCsvType('stocks');
       setData(parsedAssets);
-      setStatus('idle'); // Only set idle on success
+      setStatus('idle');
     } else {
       setStatus('error');
     }
@@ -151,8 +145,8 @@ export default function Importer({ session, onImportComplete }) {
 
     if (fileExt === 'csv') {
       Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
+        header: false, // Unified: Get raw grid
+        skipEmptyLines: 'greedy',
         complete: function (results) {
           processData(results.data, 'csv');
         },
@@ -162,16 +156,15 @@ export default function Importer({ session, onImportComplete }) {
       const reader = new FileReader();
       reader.onload = (evt) => {
         const bstr = evt.target.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        const objects = data.map(row => {
-          const obj = {};
-          row.forEach((cell, idx) => { obj[`col_${idx}`] = cell; });
-          return obj;
-        });
-        processData(objects, 'xlsx');
+        try {
+          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const grid = XLSX.utils.sheet_to_json(ws, { header: 1 });
+          processData(grid, 'xlsx');
+        } catch (err) {
+          setStatus('error');
+        }
       };
       reader.onerror = () => setStatus('error');
       reader.readAsBinaryString(file);
@@ -179,6 +172,7 @@ export default function Importer({ session, onImportComplete }) {
       setStatus('error');
     }
   };
+
 
   // When broker toggle changes in preview, update all data
   const handleBrokerChange = (newBroker) => {
