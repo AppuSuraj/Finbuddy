@@ -4,121 +4,175 @@ import { supabase } from '../supabaseClient';
 
 export default function Sidebar({ session, isCollapsed, onToggle }) {
   const navigate = useNavigate();
-  const isAdmin = session?.user?.email === 'surajsan1998@gmail.com';
+  const email = session?.user?.email || '';
+  const isAdmin = email.toLowerCase() === 'surajsan1998@gmail.com';
+  const initials = email.slice(0, 2).toUpperCase();
 
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Portfolio', path: '/portfolio', icon: PieChart },
-    { name: 'Smart Import', path: '/import', icon: FileUp }
+    { name: 'Smart Import', path: '/import', icon: FileUp },
   ];
 
   if (isAdmin) {
-    navItems.push({ name: 'System Meta-Vault', path: '/admin', icon: ShieldAlert });
+    navItems.push({ name: 'Meta-Vault', path: '/admin', icon: ShieldAlert });
   }
 
   return (
-    <aside style={{ ...styles.sidebar, width: isCollapsed ? '80px' : '250px' }}>
-      <div style={{ ...styles.brand, justifyContent: isCollapsed ? 'center' : 'flex-start', padding: isCollapsed ? '30px 0' : '30px 24px' }}>
-        <div style={styles.logoMark} />
-        {!isCollapsed && <h2 style={styles.brandText}>Finbuddy</h2>}
+    <aside style={{
+      width: isCollapsed ? '72px' : '252px',
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      borderRight: '1px solid rgba(45, 212, 191, 0.12)',
+      background: 'linear-gradient(180deg, rgba(4,16,20,0.98) 0%, rgba(6,22,28,0.97) 100%)',
+      backdropFilter: 'blur(24px)',
+      transition: 'width 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
+      overflowX: 'hidden',
+      position: 'sticky',
+      top: 0,
+      flexShrink: 0,
+    }}>
+
+      {/* Brand */}
+      <div style={{
+        padding: isCollapsed ? '24px 0' : '24px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        justifyContent: isCollapsed ? 'center' : 'flex-start',
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        transition: 'padding 0.28s ease',
+      }}>
+        <div style={{
+          width: '34px', height: '34px', borderRadius: '10px',
+          background: 'linear-gradient(135deg, #2dd4bf, #0ea5e9)',
+          boxShadow: '0 0 18px rgba(45,212,191,0.45)',
+          flexShrink: 0,
+        }} />
+        {!isCollapsed && (
+          <div style={{ overflow: 'hidden' }}>
+            <h2 style={{ fontSize: '20px', color: '#fff', margin: 0, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>Finbuddy</h2>
+            <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0, letterSpacing: '1.5px', textTransform: 'uppercase' }}>Intelligence Terminal</p>
+          </div>
+        )}
       </div>
 
-      <nav style={styles.nav}>
+      {/* User Pill */}
+      <div style={{
+        margin: isCollapsed ? '16px 10px' : '16px 16px',
+        padding: isCollapsed ? '10px 0' : '12px 14px',
+        background: 'rgba(45, 212, 191, 0.07)',
+        border: '1px solid rgba(45, 212, 191, 0.15)',
+        borderRadius: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        justifyContent: isCollapsed ? 'center' : 'flex-start',
+        transition: 'all 0.28s ease',
+      }}>
+        <div style={{
+          width: '32px', height: '32px', borderRadius: '50%',
+          background: 'linear-gradient(135deg, #2dd4bf, #0ea5e9)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '12px', fontWeight: 700, color: '#041014', flexShrink: 0,
+        }}>{initials}</div>
+        {!isCollapsed && (
+          <div style={{ overflow: 'hidden', flex: 1 }}>
+            <p style={{ fontSize: '12px', color: '#fff', margin: 0, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isAdmin ? 'Suraj (Admin)' : email.split('@')[0]}
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
+              <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>Live Session</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Nav Label */}
+      {!isCollapsed && (
+        <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0 20px 8px', margin: 0 }}>Navigation</p>
+      )}
+
+      {/* Nav Items */}
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: isCollapsed ? '0 10px' : '0 12px', flex: 1 }}>
         {navItems.map((item) => (
-          <NavLink 
-            key={item.name} 
-            to={item.path} 
-            className={({isActive}) => isActive ? 'nav-item active' : 'nav-item'}
-            style={({isActive}) => ({
-              ...styles.navItem,
-              justifyContent: isCollapsed ? 'center' : 'flex-start',
-              padding: isCollapsed ? '14px 0' : '14px 16px',
-              ...(isActive ? styles.navItemActive : {})
-            })}
+          <NavLink
+            key={item.name}
+            to={item.path}
             title={isCollapsed ? item.name : ''}
+            style={({ isActive }) => ({
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: isCollapsed ? '12px 0' : '11px 14px',
+              borderRadius: '10px',
+              textDecoration: 'none',
+              color: isActive ? 'var(--accent-primary)' : 'rgba(255,255,255,0.45)',
+              fontSize: '14px',
+              fontWeight: isActive ? 600 : 500,
+              justifyContent: isCollapsed ? 'center' : 'flex-start',
+              background: isActive ? 'rgba(45, 212, 191, 0.1)' : 'transparent',
+              boxShadow: isActive ? 'inset 3px 0 0 var(--accent-primary)' : 'none',
+              transition: 'all 0.2s ease',
+              whiteSpace: 'nowrap',
+            })}
           >
-            <item.icon size={20} color={""} className="nav-icon" />
-            {!isCollapsed && <span>{item.name}</span>}
+            <item.icon size={18} style={{ flexShrink: 0 }} />
+            {!isCollapsed && <span style={{ opacity: 1, transition: 'opacity 0.2s' }}>{item.name}</span>}
           </NavLink>
         ))}
       </nav>
 
-      <div style={{ ...styles.footer, padding: isCollapsed ? '24px 10px' : '24px' }}>
-        <button className="btn btn-secondary w-full" onClick={() => navigate('/settings')} style={{ marginBottom: '12px', justifyContent: isCollapsed ? 'center' : 'flex-start', padding: isCollapsed ? '8px 0' : '10px 20px' }}>
-          <SettingsIcon size={18} /> {!isCollapsed && 'Settings'}
+      {/* Footer */}
+      <div style={{ padding: isCollapsed ? '16px 10px' : '16px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <button
+          onClick={() => navigate('/settings')}
+          style={{
+            width: '100%', marginBottom: '8px',
+            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
+            color: 'rgba(255,255,255,0.5)', padding: isCollapsed ? '10px 0' : '9px 14px',
+            cursor: 'pointer', borderRadius: '10px', fontSize: '13px', fontWeight: 500,
+            display: 'flex', alignItems: 'center', gap: '10px',
+            justifyContent: isCollapsed ? 'center' : 'flex-start',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <SettingsIcon size={16} style={{ flexShrink: 0 }} />
+          {!isCollapsed && 'Settings'}
         </button>
-        <button className="btn w-full" style={{ background: 'transparent', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.1)', justifyContent: isCollapsed ? 'center' : 'flex-start', padding: isCollapsed ? '8px 0' : '10px 20px' }} onClick={() => supabase.auth.signOut()}>
-          <LogOut size={18} /> {!isCollapsed && 'Disconnect'}
+        <button
+          onClick={() => supabase.auth.signOut()}
+          style={{
+            width: '100%',
+            background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)',
+            color: 'rgba(239,68,68,0.7)', padding: isCollapsed ? '10px 0' : '9px 14px',
+            cursor: 'pointer', borderRadius: '10px', fontSize: '13px', fontWeight: 500,
+            display: 'flex', alignItems: 'center', gap: '10px',
+            justifyContent: isCollapsed ? 'center' : 'flex-start',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <LogOut size={16} style={{ flexShrink: 0 }} />
+          {!isCollapsed && 'Sign Out'}
         </button>
 
-        <button 
+        {/* Toggle Button */}
+        <button
           onClick={onToggle}
-          style={{ width: '100%', marginTop: '20px', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--accent-primary)', padding: '10px 0', cursor: 'pointer', borderRadius: '8px', display: 'flex', justifyContent: 'center' }}
+          style={{
+            width: '100%', marginTop: '10px',
+            background: 'rgba(45,212,191,0.07)', border: '1px solid rgba(45,212,191,0.15)',
+            color: 'var(--accent-primary)', padding: '8px 0',
+            cursor: 'pointer', borderRadius: '10px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.2s ease',
+          }}
         >
-          {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+          {isCollapsed ? <ChevronRight size={16} /> : <><ChevronLeft size={16} /><span style={{ fontSize: '12px', marginLeft: '6px' }}>Collapse</span></>}
         </button>
       </div>
     </aside>
   );
 }
-
-const styles = {
-  sidebar: {
-    height: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    borderRight: '1px solid var(--card-border)',
-    background: 'rgba(4, 16, 20, 0.9)',
-    backdropFilter: 'blur(20px)',
-    transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-    overflowX: 'hidden',
-    position: 'sticky',
-    top: 0
-  },
-  brand: {
-    padding: '30px 24px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px'
-  },
-  logoMark: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    background: 'var(--accent-gradient)',
-    boxShadow: '0 0 15px rgba(45, 212, 191, 0.4)'
-  },
-  brandText: {
-    fontSize: '24px',
-    color: '#fff',
-    margin: 0
-  },
-  nav: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    padding: '0 16px',
-    flex: 1
-  },
-  navItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-    padding: '14px 16px',
-    borderRadius: '12px',
-    textDecoration: 'none',
-    color: 'var(--text-muted)',
-    fontSize: '16px',
-    fontWeight: 500,
-    transition: 'all 0.3s ease'
-  },
-  navItemActive: {
-    background: 'rgba(45, 212, 191, 0.1)',
-    color: 'var(--accent-primary)',
-    boxShadow: 'inset 3px 0 0 var(--accent-primary)'
-  },
-  footer: {
-    padding: '24px',
-    marginTop: 'auto'
-  }
-};

@@ -1,194 +1,334 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { ArrowUpRight, Radar, PieChart as PieIcon, Radio } from 'lucide-react';
+import { ArrowUpRight, Radar, Radio, Zap, BarChart2, ShieldCheck, FileUp, ArrowRight, TrendingUp, Activity } from 'lucide-react';
+
+const MARKET_PULSE = [
+  { label: 'NIFTY 50', value: '24,315.85', change: '+0.68%', up: true },
+  { label: 'SENSEX', value: '80,116.49', change: '+0.64%', up: true },
+  { label: 'BANK NIFTY', value: '52,283.30', change: '+0.42%', up: true },
+  { label: 'GOLD (MCX)', value: '₹93,150', change: '+1.21%', up: true },
+  { label: 'USD/INR', value: '₹84.32', change: '-0.18%', up: false },
+];
+
+const FEATURES = [
+  {
+    icon: ShieldCheck,
+    color: '#2dd4bf',
+    title: 'Full Scrutiny AI',
+    desc: 'Our Quad-Layer Screener engine auto-classifies every stock into 58 SEBI sectors with 12-second deep research.',
+  },
+  {
+    icon: BarChart2,
+    color: '#0ea5e9',
+    title: 'Sector Drill-Down',
+    desc: 'Click any slice on the interactive donut chart to instantly filter your holdings by sector.',
+  },
+  {
+    icon: Radio,
+    color: '#8b5cf6',
+    title: 'Oracle Forecast',
+    desc: 'AI-driven 6-month growth projection using real-time geopolitical news + NIFTY indexing bounds.',
+  },
+];
+
+const STEPS = [
+  { num: '01', icon: FileUp, title: 'Import Your Portfolio', desc: 'Go to Smart Import → Upload your broker\'s Holdings CSV (Zerodha, Upstox, Groww supported).' },
+  { num: '02', icon: Zap, title: 'Run Live Intelligence Sync', desc: 'Click "Live Quotes" in Portfolio → AI auto-classifies sectors and fetches live market prices.' },
+  { num: '03', icon: TrendingUp, title: 'Explore Your Dashboard', desc: 'Return here to see your Oracle forecast, sentiment weather, and portfolio health score.' },
+];
+
 export default function Dashboard({ session }) {
+  const navigate = useNavigate();
+  const [assets, setAssets] = useState([]);
   const [netWorth, setNetWorth] = useState(0);
   const [weather, setWeather] = useState({ percent: 50, articleCount: 0 });
-  
-  // Oracle State
   const [oracleData, setOracleData] = useState(null);
   const [projectionTimeline, setProjectionTimeline] = useState([]);
   const [oracleSyncing, setOracleSyncing] = useState(false);
-  
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  const email = session?.user?.email || '';
+  const isAdmin = email.toLowerCase() === 'surajsan1998@gmail.com';
+  const firstName = isAdmin ? 'Suraj' : email.split('@')[0];
+
+  useEffect(() => { fetchDashboardData(); }, []);
 
   async function fetchDashboardData() {
     const { data: assetData } = await supabase.from('assets').select('*').eq('user_id', session.user.id);
-    let totalAssets = 0;
-    
     if (assetData && assetData.length > 0) {
-      totalAssets = assetData.reduce((acc, curr) => acc + Number(curr.value), 0);
-      
-      // Calculate Portfolio Intelligence Weather via Top 4 holdings
-      const sorted = [...assetData].sort((a,b) => Number(b.value) - Number(a.value));
+      const total = assetData.reduce((acc, curr) => acc + Number(curr.value), 0);
+      setNetWorth(total);
+      setAssets(assetData);
+
+      const sorted = [...assetData].sort((a, b) => Number(b.value) - Number(a.value));
       const topNames = sorted.slice(0, 4).map(a => encodeURIComponent(a.name.split('(')[0].trim())).join(',');
-      
+
       try {
         const res = await fetch(`/api/portfolio-sentiment?names=${topNames}`);
-        const sentimentData = await res.json();
-        if (sentimentData && typeof sentimentData.percent === 'number') {
-           setWeather(sentimentData);
-        }
-      } catch(e) {}
-      
-      // Request Machine Oracle Neural Subsystem
+        const s = await res.json();
+        if (s && typeof s.percent === 'number') setWeather(s);
+      } catch (e) {}
+
       try {
         setOracleSyncing(true);
         const oRes = await fetch(`/api/oracle?names=${topNames}`);
-        const predictData = await oRes.json();
-        setOracleData(predictData);
-        
-        // Extrapolate prediction dynamically onto the user's specific Net Worth line
-        if (totalAssets > 0) {
-            const months = ['Today', 'Month 1', 'Month 2', 'Month 3', 'Month 4', 'Month 5', 'Month 6'];
-            let current = totalAssets;
-            // Smooth the total growth % linearly over the trajectory
-            const monthlyGrowth = predictData.growthPercent / 6;
-            
-            const timeline = months.map(m => {
-               const point = { month: m, 'Projected Value': Math.round(current) };
-               current = current * (1 + (monthlyGrowth / 100));
-               return point;
-            });
-            setProjectionTimeline(timeline);
-        }
-      } catch(e) {}
+        const pred = await oRes.json();
+        setOracleData(pred);
+        const months = ['Today', 'M+1', 'M+2', 'M+3', 'M+4', 'M+5', 'M+6'];
+        let cur = total;
+        const mg = pred.growthPercent / 6;
+        setProjectionTimeline(months.map(m => {
+          const point = { month: m, 'Projected Value': Math.round(cur) };
+          cur = cur * (1 + mg / 100);
+          return point;
+        }));
+      } catch (e) {}
       setOracleSyncing(false);
     }
-    
-    setNetWorth(totalAssets);
     setLoading(false);
   }
 
   if (loading) {
-    return <div className="main-content"><p className="text-muted">Analyzing Portfolio...</p></div>;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '16px' }}>
+        <Activity size={32} style={{ color: 'var(--accent-primary)', animation: 'spin 1s linear infinite' }} />
+        <p className="text-muted" style={{ letterSpacing: '2px', textTransform: 'uppercase', fontSize: '12px' }}>Initializing Terminal...</p>
+      </div>
+    );
   }
 
+  const hasAssets = assets.length > 0;
   const sentimentColor = weather.percent > 65 ? '#2dd4bf' : weather.percent < 45 ? '#ef4444' : '#eab308';
+  const totalBuyValue = assets.reduce((acc, a) => acc + (a.buy_price ? Number(a.buy_price) : 0), 0);
+  const pnl = totalBuyValue > 0 ? netWorth - totalBuyValue : null;
+
   const gaugeData = [
     { name: 'Score', value: weather.percent, fill: sentimentColor },
-    { name: 'Empty', value: 100 - weather.percent, fill: 'rgba(255,255,255,0.05)' }
+    { name: 'Empty', value: 100 - weather.percent, fill: 'rgba(255,255,255,0.04)' },
   ];
 
-  const isAdmin = session?.user?.email === 'surajsan1998@gmail.com';
-
   return (
-    <div className="animate-in">
-      <div className="page-header">
-        <div>
-          <h1 style={{ fontSize: '36px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            Welcome back, <span className="text-gradient">{isAdmin ? 'Suraj' : 'Investor'}</span>
-            {isAdmin && (
-               <span style={{ fontSize: '14px', background: 'var(--accent-primary)', color: '#000', padding: '4px 10px', borderRadius: '16px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>
-                  👑 System Creator
-               </span>
-            )}
+    <div className="animate-in" style={{ maxWidth: '1400px' }}>
+
+      {/* ── Market Pulse Ticker ── */}
+      <div style={{
+        display: 'flex', gap: '0', overflowX: 'auto', marginBottom: '28px',
+        background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: '12px', padding: '0', scrollbarWidth: 'none',
+      }}>
+        {MARKET_PULSE.map((m, i) => (
+          <div key={i} style={{
+            padding: '12px 24px', borderRight: i < MARKET_PULSE.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none',
+            whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', letterSpacing: '1px', textTransform: 'uppercase', margin: '0 0 3px' }}>{m.label}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>{m.value}</span>
+              <span style={{ fontSize: '11px', color: m.up ? '#10b981' : '#ef4444', fontWeight: 600 }}>{m.change}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Header ── */}
+      <div style={{ marginBottom: '32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+          <h1 style={{ fontSize: '32px', margin: 0 }}>
+            Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'},{' '}
+            <span className="text-gradient">{firstName}</span>
           </h1>
-          <p className="text-muted">Here is your live intelligence dashboard.</p>
+          {isAdmin && (
+            <span style={{ fontSize: '11px', background: 'var(--accent-gradient)', color: '#041014', padding: '3px 10px', borderRadius: '20px', fontWeight: 700, letterSpacing: '0.5px' }}>
+              👑 Admin
+            </span>
+          )}
         </div>
+        <p className="text-muted" style={{ fontSize: '14px' }}>
+          {hasAssets
+            ? `Your portfolio intelligence is live. ${assets.length} assets tracked across ${[...new Set(assets.map(a => a.sector).filter(Boolean))].length} sectors.`
+            : 'Welcome to your financial intelligence terminal. Follow the setup guide to get started.'}
+        </p>
       </div>
 
-      <div style={styles.metricsGrid}>
-        <div className="glass-panel delay-1">
-          <p className="text-muted text-sm">Active Wealth Exposure</p>
-          <h2 style={{ fontSize: '42px', margin: '10px 0' }}>
-            ₹{netWorth.toLocaleString('en-IN')}
-          </h2>
-          <div className="flex items-center gap-2 text-success" style={{ fontWeight: 500 }}>
-            <ArrowUpRight size={20} />
-            <span>Tracking {netWorth > 0 ? 'Live Assets' : 'No Assets Yet'}</span>
+      {hasAssets ? (
+        // ── ACTIVE STATE ──
+        <>
+          {/* KPI Row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+            {[
+              {
+                label: 'Total Portfolio Value',
+                value: `₹${netWorth.toLocaleString('en-IN')}`,
+                sub: 'Active Wealth Exposure',
+                color: '#2dd4bf',
+                icon: TrendingUp,
+              },
+              {
+                label: 'Total Assets',
+                value: assets.length,
+                sub: 'Holdings in Vault',
+                color: '#0ea5e9',
+                icon: BarChart2,
+              },
+              {
+                label: 'Sector Coverage',
+                value: [...new Set(assets.map(a => a.sector).filter(Boolean))].length,
+                sub: 'Unique SEBI Sectors',
+                color: '#8b5cf6',
+                icon: Radar,
+              },
+              ...(pnl !== null ? [{
+                label: 'Unrealised P&L',
+                value: `${pnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(pnl)).toLocaleString('en-IN')}`,
+                sub: pnl >= 0 ? 'Net Gain' : 'Net Loss',
+                color: pnl >= 0 ? '#10b981' : '#ef4444',
+                icon: ArrowUpRight,
+              }] : []),
+            ].map((kpi, i) => (
+              <div key={i} className="glass-panel" style={{ padding: '20px', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: -20, right: -20, width: '80px', height: '80px', borderRadius: '50%', background: kpi.color, opacity: 0.06 }} />
+                <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', letterSpacing: '1px', textTransform: 'uppercase', margin: '0 0 8px' }}>{kpi.label}</p>
+                <h2 style={{ fontSize: '28px', margin: '0 0 4px', color: kpi.color, fontWeight: 700 }}>{kpi.value}</h2>
+                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', margin: 0 }}>{kpi.sub}</p>
+              </div>
+            ))}
           </div>
-        </div>
-        
-        <div className="glass-panel delay-2" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10px' }}>
-          <p className="text-muted text-sm flex items-center gap-2" style={{ marginBottom: '16px' }}>
-             <Radar size={16} color={sentimentColor}/> Macro Intelligence Weather
-          </p>
-          
-          <div style={{ position: 'relative', width: '220px', height: '110px' }}>
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie
-                  data={gaugeData} cx="50%" cy="100%" startAngle={180} endAngle={0}
-                  innerRadius={75} outerRadius={95} paddingAngle={0} dataKey="value" stroke="none" cornerRadius={10}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center' }}>
-               <h2 style={{ fontSize: '34px', margin: '0 0 4px 0', color: sentimentColor }}>{weather.percent}%</h2>
-               <p className="text-muted text-xs" style={{ textTransform: 'uppercase', letterSpacing: '1px' }}>
-                 {weather.percent > 65 ? 'Bullish' : weather.percent < 45 ? 'Bearish' : 'Neutral'}
-               </p>
-            </div>
-          </div>
-          <p className="text-muted text-xs" style={{ marginTop: '20px' }}>
-             Analysis of {weather.articleCount} incoming global news headlines across your core holdings today.
-          </p>
-        </div>
-      </div>
 
-      <div className="glass-panel delay-3" style={{ marginTop: '30px', position: 'relative' }}>
-         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-               <h3 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Radio size={22} className="text-secondary" /> Projective Oracle Forecast
-               </h3>
-               <p className="text-muted text-sm" style={{ marginBottom: '24px' }}>AI-driven growth vector mapping using active geopolitical news parsing & NIFTY indexing bounds.</p>
-            </div>
-            {oracleData && (
-                <div style={{ textAlign: 'right', background: 'rgba(0,0,0,0.2)', padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--accent-primary)' }}>
-                   <p className="text-muted text-xs uppercase" style={{ letterSpacing: '1px' }}>6-Month Alpha Projection</p>
-                   {oracleSyncing ? <p className="text-muted spin-animation">Calculating...</p> : (
-                     <h2 className={oracleData.growthPercent >= 0 ? "text-success" : "text-danger"} style={{ fontSize: '28px', marginTop: '4px' }}>
-                       {oracleData.growthPercent >= 0 ? '+' : ''}{oracleData.growthPercent}%
-                     </h2>
-                   )}
+          {/* Sentiment + Oracle Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', marginBottom: '28px' }}>
+            {/* Sentiment Gauge */}
+            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 20px' }}>
+              <p className="text-muted" style={{ fontSize: '11px', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Radar size={14} color={sentimentColor} /> Market Sentiment
+              </p>
+              <div style={{ position: 'relative', width: '200px', height: '110px' }}>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie data={gaugeData} cx="50%" cy="100%" startAngle={180} endAngle={0}
+                      innerRadius={70} outerRadius={88} dataKey="value" stroke="none" cornerRadius={8}>
+                      {gaugeData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center' }}>
+                  <h2 style={{ fontSize: '30px', margin: '0 0 2px', color: sentimentColor, fontWeight: 700 }}>{weather.percent}%</h2>
+                  <p style={{ fontSize: '11px', color: sentimentColor, margin: 0, letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
+                    {weather.percent > 65 ? '🟢 Bullish' : weather.percent < 45 ? '🔴 Bearish' : '🟡 Neutral'}
+                  </p>
                 </div>
-            )}
-         </div>
-         
-         <div style={{ height: '320px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {oracleSyncing ? (
-             <p className="text-primary" style={{ letterSpacing: '2px', textTransform: 'uppercase' }}>📡 Processing Vector Weights...</p>
-          ) : projectionTimeline.length > 0 ? (
-          <ResponsiveContainer>
-            <LineChart data={projectionTimeline}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis dataKey="month" stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-              <YAxis hide domain={['dataMin - (dataMin*0.05)', 'dataMax + (dataMax*0.05)']} />
-              <Tooltip 
-                formatter={(value) => `₹${Number(value).toLocaleString('en-IN')}`}
-                contentStyle={{ background: '#0a1f26', border: '1px solid var(--card-border)', borderRadius: '8px' }}
-                itemStyle={{ color: '#fff' }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="Projected Value" 
-                stroke="var(--accent-primary)" 
-                strokeWidth={3}
-                strokeDasharray="6 6"
-                dot={{ fill: 'var(--bg-color)', stroke: 'var(--accent-primary)', strokeWidth: 2, r: 5 }}
-                activeDot={{ r: 8, fill: 'var(--accent-primary)' }}
-                isAnimationActive={true}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          ) : <p className="text-muted">Import assets into the Vault to unlock Oracle mathematical forecasting.</p>}
-        </div>
-      </div>
+              </div>
+              <p className="text-muted" style={{ fontSize: '11px', textAlign: 'center', marginTop: '20px', lineHeight: 1.5 }}>
+                Analysis of <strong style={{ color: sentimentColor }}>{weather.articleCount}</strong> global news headlines across your core holdings.
+              </p>
+            </div>
+
+            {/* Oracle Chart */}
+            <div className="glass-panel" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                <div>
+                  <h3 style={{ margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Radio size={18} className="text-secondary" /> Oracle Forecast
+                  </h3>
+                  <p className="text-muted" style={{ fontSize: '12px', margin: 0 }}>6-Month AI-Projected Growth Trajectory</p>
+                </div>
+                {oracleData && !oracleSyncing && (
+                  <div style={{ textAlign: 'right', background: 'rgba(0,0,0,0.25)', padding: '10px 16px', borderRadius: '10px', border: `1px solid ${oracleData.growthPercent >= 0 ? 'rgba(45,212,191,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                    <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', margin: '0 0 3px', letterSpacing: '1px', textTransform: 'uppercase' }}>Alpha Projection</p>
+                    <h2 style={{ fontSize: '24px', margin: 0, color: oracleData.growthPercent >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>
+                      {oracleData.growthPercent >= 0 ? '+' : ''}{oracleData.growthPercent}%
+                    </h2>
+                  </div>
+                )}
+              </div>
+              <div style={{ height: '220px' }}>
+                {oracleSyncing ? (
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <p style={{ color: 'var(--accent-primary)', letterSpacing: '2px', textTransform: 'uppercase', fontSize: '12px' }}>📡 Processing Vector Weights...</p>
+                  </div>
+                ) : projectionTimeline.length > 0 ? (
+                  <ResponsiveContainer>
+                    <LineChart data={projectionTimeline}>
+                      <defs>
+                        <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#2dd4bf" />
+                          <stop offset="100%" stopColor="#0ea5e9" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                      <XAxis dataKey="month" stroke="rgba(255,255,255,0.2)" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis hide domain={['dataMin - (dataMin*0.04)', 'dataMax + (dataMax*0.04)']} />
+                      <Tooltip
+                        formatter={(v) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Projected Value']}
+                        contentStyle={{ background: '#0a1f26', border: '1px solid rgba(45,212,191,0.2)', borderRadius: '10px' }}
+                        itemStyle={{ color: '#2dd4bf' }}
+                        labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
+                      />
+                      <Line type="monotone" dataKey="Projected Value" stroke="url(#lineGrad)"
+                        strokeWidth={2.5} strokeDasharray="6 3"
+                        dot={{ fill: '#041014', stroke: '#2dd4bf', strokeWidth: 2, r: 4 }}
+                        activeDot={{ r: 7, fill: '#2dd4bf' }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-muted" style={{ textAlign: 'center', marginTop: '80px' }}>No data yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        // ── EMPTY STATE: ONBOARDING ──
+        <>
+          {/* Feature Marketing Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '36px' }}>
+            {FEATURES.map((f, i) => (
+              <div key={i} className="glass-panel" style={{ padding: '28px', position: 'relative', overflow: 'hidden', border: `1px solid ${f.color}22` }}>
+                <div style={{ position: 'absolute', top: -30, right: -30, width: '100px', height: '100px', borderRadius: '50%', background: f.color, opacity: 0.06 }} />
+                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: `${f.color}18`, border: `1px solid ${f.color}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+                  <f.icon size={22} style={{ color: f.color }} />
+                </div>
+                <h3 style={{ fontSize: '16px', margin: '0 0 8px', color: '#fff' }}>{f.title}</h3>
+                <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.45)', margin: 0, lineHeight: 1.65 }}>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Setup Guide */}
+          <div className="glass-panel" style={{ padding: '32px', marginBottom: '28px', background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
+            <h2 style={{ fontSize: '22px', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Zap size={22} style={{ color: 'var(--accent-primary)' }} /> Unlock Your Intelligence in 3 Steps
+            </h2>
+            <p className="text-muted" style={{ fontSize: '13px', marginBottom: '28px' }}>Follow these steps to activate your personal financial command centre.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+              {STEPS.map((step, i) => (
+                <div key={i} style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{
+                    flexShrink: 0, width: '42px', height: '42px', borderRadius: '50%',
+                    background: 'rgba(45,212,191,0.12)', border: '1px solid rgba(45,212,191,0.25)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '13px', fontWeight: 700, color: 'var(--accent-primary)',
+                  }}>{step.num}</div>
+                  <div>
+                    <h4 style={{ fontSize: '14px', margin: '0 0 5px', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <step.icon size={14} style={{ color: 'var(--accent-primary)' }} /> {step.title}
+                    </h4>
+                    <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', margin: 0, lineHeight: 1.6 }}>{step.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              className="btn btn-primary"
+              style={{ marginTop: '28px', padding: '12px 28px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
+              onClick={() => navigate('/import')}
+            >
+              Start with Smart Import <ArrowRight size={16} />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
-
-const styles = {
-  metricsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(350px, 1fr) 1fr',
-    gap: '30px'
-  }
-};
