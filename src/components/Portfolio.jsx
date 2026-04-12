@@ -56,6 +56,29 @@ const Sparkline = ({ name }) => {
 };
 
 export default function Portfolio({ session }) {
+  const getScrutinySummary = (data) => {
+    if (!data) return null;
+    let summary = "";
+    const signals = [];
+    
+    // Overall Trend Summary
+    if (data.trend?.includes('Strong Uptrend')) summary = "This stock is in a powerful bullish cycle, consistently trading above its long-term moving averages.";
+    else if (data.trend?.includes('Strong Downtrend')) summary = "Bearish dominance is clear; the stock is struggling to find support below its key moving averages.";
+    else if (data.trend?.includes('Recovery')) summary = "The stock is attempting a recovery, recently breaking back above its 50-day average.";
+    else if (data.trend?.includes('Pullback')) summary = "Currently in a short-term pullback within a larger uptrend; watch for support at DMA 200.";
+    else summary = "The stock is currently in a consolidation phase, seeking a clear direction.";
+
+    // Actionable Technical Signals
+    if (data.rsi > 70) signals.push("It is in the 'Overbought' zone (RSI > 70), which often signals reaching a peak.");
+    if (data.rsi < 30) signals.push("It is currently 'Oversold' (RSI < 30), which can lead to a reversal or a 'dead cat' bounce.");
+    if (data.crossoverSignal === 'Golden Cross') signals.push("A 'Golden Cross' has triggered—a strong long-term momentum indicator.");
+    if (data.crossoverSignal === 'Death Cross') signals.push("A 'Death Cross' is active, warning of a potential deeper correction.");
+    if (data.pattern?.signal === 'Bullish') signals.push(`The ${data.pattern.name} pattern recently formed, showing institutional buying pressure.`);
+    if (data.pattern?.signal === 'Bearish') signals.push(`The ${data.pattern.name} pattern suggests caution as sellers are gaining control.`);
+    
+    return { main: summary, tags: signals };
+  };
+
   const [assetAllocation, setAssetAllocation] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -692,7 +715,18 @@ export default function Portfolio({ session }) {
                              </span>
                            )}
                          </div>
-                         <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginBottom: '20px', lineHeight: 1.6 }}>{deepScrutinyData.trendDesc}</p>
+                                                   <div style={{ padding: '16px', background: 'rgba(45,212,191,0.06)', borderRadius: '12px', marginBottom: '20px', border: '1px solid rgba(45,212,191,0.15)' }}>
+                            <p style={{ fontSize: '14px', color: '#fff', margin: '0 0 10px', lineHeight: '1.5', fontWeight: 500 }}>
+                              {getScrutinySummary(deepScrutinyData).main}
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {getScrutinySummary(deepScrutinyData).tags.map((tag, i) => (
+                                <p key={i} style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-primary)' }} /> {tag}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
 
                          {/* DMA + RSI Grid */}
                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '16px' }}>
