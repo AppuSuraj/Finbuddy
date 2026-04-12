@@ -59,10 +59,10 @@ export default function Importer({ session, onImportComplete }) {
     return name.split(' ')[0].replace(/[^A-Z0-9&]/g, '');
   };
 
-  const normalizeRow = (row, index) => {
+  const normalizeRow = (row, index, activeBroker) => {
     const keys = Object.keys(row);
     const getVal = (possibleHeaders) => {
-      const foundKey = keys.find(k => possibleHeaders.includes(k.trim().toLowerCase()));
+      const foundKey = keys.find(k => k && possibleHeaders.includes(k.trim().toLowerCase()));
       return row[foundKey];
     };
 
@@ -80,7 +80,7 @@ export default function Importer({ session, onImportComplete }) {
       value: curVal || 0,
       buy_price: buyPrice || null,
       color: COLORS[index % COLORS.length],
-      broker: importBroker // Use current selected broker
+      broker: activeBroker // Use the passed broker, not state
     };
   };
 
@@ -90,11 +90,13 @@ export default function Importer({ session, onImportComplete }) {
       return;
     }
 
-    // Auto-detect broker based on headers
+    // Auto-detect broker based on headers (initially)
+    let activeBroker = importBroker; 
     const sampleKeysStr = Object.keys(jsonData[0]).join(' ').toLowerCase();
-    if (sampleKeysStr.includes('stock name')) setImportBroker('Groww');
-    else if (sampleKeysStr.includes('instrument')) setImportBroker('Zerodha');
-    else if (detectedExtension === 'xlsx') setImportBroker('Groww');
+    
+    if (sampleKeysStr.includes('stock name')) activeBroker = 'Groww';
+    else if (sampleKeysStr.includes('instrument')) activeBroker = 'Zerodha';
+    else if (detectedExtension === 'xlsx') activeBroker = 'Groww';
 
     // Attempt to find a row that looks like a header if the first row fails normalization logic
     const stockKeywords = ['instrument', 'stock name', 'quantity', 'avg', 'closing'];
@@ -107,6 +109,12 @@ export default function Importer({ session, onImportComplete }) {
         const rowMatchCount = stockKeywords.filter(k => rowValues.some(rv => rv.includes(k))).length;
         if (rowMatchCount >= 2) {
           const headers = Object.values(jsonData[i]);
+          
+          // Re-evaluate broker based on actual header row
+          const headerStr = headers.join(' ').toLowerCase();
+          if (headerStr.includes('stock name')) activeBroker = 'Groww';
+          else if (headerStr.includes('instrument')) activeBroker = 'Zerodha';
+
           finalRows = jsonData.slice(i + 1).map(r => {
             const obj = {};
             Object.values(r).forEach((v, idx) => { if (headers[idx]) obj[headers[idx]] = v; });
@@ -117,17 +125,19 @@ export default function Importer({ session, onImportComplete }) {
       }
     }
 
+    setImportBroker(activeBroker); // Update state for UI
+
     const parsedAssets = finalRows
-      .map((row, i) => normalizeRow(row, i))
+      .map((row, i) => normalizeRow(row, i, activeBroker))
       .filter(asset => asset !== null && asset.value > 0);
 
     if (parsedAssets.length > 0) {
       setCsvType('stocks');
       setData(parsedAssets);
+      setStatus('idle'); // Only set idle on success
     } else {
       setStatus('error');
     }
-    setStatus('idle');
   };
 
   const handleFileUpload = (e) => {
