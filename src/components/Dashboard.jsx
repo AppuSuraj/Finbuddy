@@ -12,15 +12,30 @@ const MARKET_PULSE = [
 ];
 
 const FEATURES = [
-  { icon: ShieldCheck, color: '#2dd4bf', title: 'Full Scrutiny AI', desc: 'Our Quad-Layer Screener engine auto-classifies every stock into 58 SEBI sectors with 12-second deep research.' },
-  { icon: BarChart2, color: '#0ea5e9', title: 'Sector Drill-Down', desc: 'Click any slice on the interactive donut chart to instantly filter your holdings by sector.' },
-  { icon: Radio, color: '#8b5cf6', title: 'Oracle Forecast', desc: 'AI-driven 6-month growth projection using real-time geopolitical news + NIFTY indexing bounds.' },
+  {
+    icon: Radar,
+    color: '#2dd4bf',
+    title: "Your Portfolio's Sentiment — Not The Market's",
+    desc: 'Forget generic market heat. Finbuddy analyses news of only the stocks you own, giving you a personalised Bullish/Bearish score tailored to your exact holdings — no noise, all signal.',
+  },
+  {
+    icon: ShieldCheck,
+    color: '#0ea5e9',
+    title: 'Deep Technical Scrutiny on Every Holding',
+    desc: 'Click any stock to instantly get DMA50/200 positioning, Golden Cross & Death Cross alerts, RSI zone, Bollinger Band position, and candle pattern detection.',
+  },
+  {
+    icon: Radio,
+    color: '#8b5cf6',
+    title: 'Oracle Forecast Built Around Your Wealth',
+    desc: "Our 6-month projection isn't a NIFTY copy. It models your specific holdings, sector weights, and live sentiment to render a growth curve that is uniquely yours.",
+  },
 ];
 
 const STEPS = [
-  { num: '01', icon: FileUp, title: 'Import Your Portfolio', desc: "Go to Smart Import → Upload your broker's Holdings CSV (Zerodha, Upstox, Groww supported)." },
-  { num: '02', icon: Zap, title: 'Run Live Intelligence Sync', desc: 'Click "Live Quotes" in Portfolio → AI auto-classifies sectors and fetches live market prices.' },
-  { num: '03', icon: TrendingUp, title: 'Explore Your Dashboard', desc: 'Return here to see your Oracle forecast, sentiment weather, and portfolio health score.' },
+  { num: '01', icon: FileUp, title: 'Import Your Portfolio', desc: "Go to Smart Import → Upload your broker's Holdings CSV. Zerodha, Upstox, Groww, and Angel Broking are supported." },
+  { num: '02', icon: Zap, title: 'Run AI Intelligence Sync', desc: 'Click "Live Quotes" in Portfolio → AI auto-classifies all stocks into SEBI sectors and fetches live market prices in one pass.' },
+  { num: '03', icon: TrendingUp, title: 'Your Dashboard Goes Live', desc: 'Return here to see your personalised Oracle forecast, your portfolio sentiment score, and deep technical analysis on each holding.' },
 ];
 
 // Dashboard is now a pure rendering component — all data fetching lives in App.jsx
