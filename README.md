@@ -1,30 +1,42 @@
-# Finbuddy: Professional Portfolio Terminal & Market Intelligence Engine
+# Finbuddy: SaaS Financial Intelligence Terminal
 
-Finbuddy is a React-powered, full-stack intelligence platform dedicated to seamlessly aggregating personal stock portfolios while scraping actionable AI insights natively from Google News and Yahoo Finance. 
+**Finbuddy** is a professional-grade SaaS application designed to provide high-fidelity insights into your Indian stock portfolio. Built with React, Supabase, and a custom "Full Scrutiny" AI research engine.
 
-Built strictly for single-minded portfolio intelligence, Finbuddy tracks Indian (NSE/BSE) stock health, provides smart CSV importer ingestion, and ranks incoming Google News via custom, deep-integrated Natural Language Processing (AFINN sentiment dictionary).
+## 🚀 Live Environment
+The application is deployed and accessible in the cloud:
+- **Production URL**: [https://finbuddy-git-vercel-install-818f51-surajsan1998-5474s-projects.vercel.app](https://finbuddy-git-vercel-install-818f51-surajsan1998-5474s-projects.vercel.app)
 
-## 🚀 Key Features
+---
 
-* **Cinematic Analytics HUD**: An immersive, dark-mode 3x3 dashboard structure showcasing absolute asset exposure, Donut Allocations, and precise weighting tables using sleek glassmorphism panels.
-* **NLP Intelligence Scraper (Sentiment Engine)**: An internal Vite API interceptor seamlessly tracks the Google News RSS endpoints to load targeted headlines. Those headlines are mathematically processed via a Natural Language Processing Sentiment Engine to badge breaking news with Live Market Sentiments (🟢 Positive, 🔴 Negative, ⚪ Neutral).
-* **Deep Financial Proxy Framework**: Fully intercepts and wraps `yahoo-finance2` metrics under the hood perfectly dodging CORS to deliver Book Value, PE ratios, and dividend data directly into the DOM via a Z-Index 50 Absolute Screen Modal.
-* **One-Click Vault Importer**: Intelligently auto-parses your raw CSV broker statements via regex heuristic pattern detection, seamlessly mapping arrays of new equity data strictly to your Supabase cloud backend in under a second. 
+## 🔥 Key Intelligence Features
 
-## 🛠️ Stack & Technologies Used
+### 1. Quad-Layer Scrutiny Engine (Deep AI)
+Unlike standard trackers, Finbuddy uses a multi-layer scraping architecture to accurately classify Indian assets:
+- **Broad Sector / Industry Matching**: Automatic mapping of 5000+ NSE/BSE stocks to 58 precise SEBI industry categories.
+- **On-Demand Research**: The "Deep Scrutiny" button triggers a focused 12-second AI browse of Screener.in and Yahoo Finance metadata to recover stubborn or unlisted assets.
 
-- **Frontend Core**: React Elements mapped via Vite (ESM routing powered by `react-router-dom`).
-- **Styling Architecture**: Vanilla CSS with robust design variables, dynamic animations, and structural Glassmorphism aesthetics (`backdrop-filter`).
-- **Intelligent Visualizations**: Recharts (Custom customized active-shape grouping algorithms routing the "Top 6" slicing).
-- **Backend Infrastructure**: Supabase / PostgreSQL handling robust transactional logic and synchronizations across your cloud tables.
-- **Custom Node Edge Pipelines**: 
-  - `rss-parser` (Firing backend algorithmic queries mapping `GET` requests to Google News specifically engineered for the `en-IN` India locale feed).
-  - `yahoo-finance2` (V3 Architecture integration for scraping granular metrics: Market Cap, 52W High/Lows, and ROA metrics).
-  - `sentiment` (NLP Textual Analysis dictionary mapping tool calculating numeric weights inside the proxy before mapping back the JSON).
+### 2. Interactive Sector Analytics
+- **Pie-Chart Drilldowns**: Click any sector segment on the donut chart to instantly filter your holdings list.
+- **Real-Time Sentiment**: NLP-driven sentiment analysis on news feeds for every portfolio asset.
 
-## 📦 Setup & Live Build Instructions
+### 3. SaaS Multi-Tenant Security
+- **Independent Portfolios**: Secure row-level security (RLS) via Supabase ensures guests see only their own data.
+- **Smart Importer**: Heuristic CSV parsing with an automated "Onboarding Guide" for first-time users.
 
-1. Retrieve the project and immediately execute `npm install` inside the root to securely reconstruct all client, charting, and backend node scraping packages.
-2. Guarantee you have appropriately mounted the `.env` root keys defining `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-3. Ignite the system using `npm run dev`. *The active Node Backend Server will actively mount the specialized middleware HTTP RSS proxy simultaneously while building the React UI!*
-4. Access the command terminal bridge via `http://localhost:5173/`.
+---
+
+## 🛠️ Technical Stack
+- **Frontend**: React 19 + Vite (High Performance)
+- **Styling**: Oceanic Glassmorphism (Vanilla CSS)
+- **Backend & Auth**: Supabase (PostgreSQL with RLS)
+- **Hosting**: Vercel Serverless Functions (Node.js 20+)
+- **Data Engine**: `yahoo-finance2`, `rss-parser`, `sentiment`.
+
+## 📈 Roadmap
+- [x] Production Vercel Migration.
+- [x] Collapsible Responsive Sidebar.
+- [x] Interactive Charts.
+- [ ] Bank Statement Auto-Tagging.
+
+---
+*Created by Suraj for the Finbuddy Terminal Project.*

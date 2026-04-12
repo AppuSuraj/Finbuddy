@@ -129,14 +129,20 @@ h1, h2, h3, h4, h5 {
 /* Base Layout Classes */
 .app-container {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
   min-height: 100vh;
+  transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .main-content {
   padding: 40px;
   height: 100vh;
   overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    padding: 24px 16px;
+  }
 }
 
 .page-header {

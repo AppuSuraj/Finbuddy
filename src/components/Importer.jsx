@@ -84,11 +84,29 @@ export default function Importer({ session }) {
 
   return (
     <div className="animate-in">
-      <div className="page-header">
         <div>
-          <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>Data Importer</h1>
-          <p className="text-muted">Smart Auto-Classification for Stocks, Banking & General CSVs.</p>
+          <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>Smart Importer</h1>
+          <p className="text-muted">High-fidelity classification for Stocks & Portfolio Data.</p>
         </div>
+      </div>
+
+      {/* New User Onboarding Guide */}
+      <div className="glass-panel delay-1" style={{ marginBottom: '24px', padding: '24px', border: '1px solid var(--accent-primary)', background: 'rgba(45, 212, 191, 0.05)' }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-primary)', marginBottom: '16px' }}>
+          <CheckCircle size={20} /> New User Guide: How to Import
+        </h3>
+        <p style={{ fontSize: '14px', lineHeight: '1.6', marginBottom: '16px' }}>
+          To automatically categorize your stocks, upload a **CSV file** with the following column headers. Most brokers (like Zerodha, Upstox, or Groww) provide this in your "Holdings" or "Portfolio" report.
+        </p>
+        <div style={{ background: 'rgba(0,0,0,0.3)', padding: '16px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '13px' }}>
+          Instrument, Qty., Cur. val<br/>
+          RELIANCE, 10, 25000<br/>
+          HDFCBANK, 50, 75000<br/>
+          TCS, 5, 20000
+        </div>
+        <p style={{ fontSize: '12px', marginTop: '12px', opacity: 0.8 }}>
+          *Note: Ensure "Instrument" contains the stock symbol (e.g. RELIANCE) so the AI can find the sector.
+        </p>
       </div>
 
       <div className="glass-panel delay-1" style={{ textAlign: 'center', padding: '60px 40px', borderStyle: 'dashed', borderWidth: '2px' }}>

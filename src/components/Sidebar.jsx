@@ -1,8 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, PieChart, Settings as SettingsIcon, FileUp, LogOut, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, PieChart, Settings as SettingsIcon, FileUp, LogOut, ShieldAlert, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
-export default function Sidebar({ session }) {
+export default function Sidebar({ session, isCollapsed, onToggle }) {
   const navigate = useNavigate();
   const isAdmin = session?.user?.email === 'surajsan1998@gmail.com';
 
@@ -17,10 +17,10 @@ export default function Sidebar({ session }) {
   }
 
   return (
-    <aside style={styles.sidebar}>
-      <div style={styles.brand}>
+    <aside style={{ ...styles.sidebar, width: isCollapsed ? '80px' : '250px' }}>
+      <div style={{ ...styles.brand, justifyContent: isCollapsed ? 'center' : 'flex-start', padding: isCollapsed ? '30px 0' : '30px 24px' }}>
         <div style={styles.logoMark} />
-        <h2 style={styles.brandText}>Finbuddy</h2>
+        {!isCollapsed && <h2 style={styles.brandText}>Finbuddy</h2>}
       </div>
 
       <nav style={styles.nav}>
@@ -31,21 +31,31 @@ export default function Sidebar({ session }) {
             className={({isActive}) => isActive ? 'nav-item active' : 'nav-item'}
             style={({isActive}) => ({
               ...styles.navItem,
+              justifyContent: isCollapsed ? 'center' : 'flex-start',
+              padding: isCollapsed ? '14px 0' : '14px 16px',
               ...(isActive ? styles.navItemActive : {})
             })}
+            title={isCollapsed ? item.name : ''}
           >
             <item.icon size={20} color={""} className="nav-icon" />
-            <span>{item.name}</span>
+            {!isCollapsed && <span>{item.name}</span>}
           </NavLink>
         ))}
       </nav>
 
-      <div style={styles.footer}>
-        <button className="btn btn-secondary w-full" onClick={() => navigate('/settings')} style={{ marginBottom: '12px' }}>
-          <SettingsIcon size={18} /> Settings
+      <div style={{ ...styles.footer, padding: isCollapsed ? '24px 10px' : '24px' }}>
+        <button className="btn btn-secondary w-full" onClick={() => navigate('/settings')} style={{ marginBottom: '12px', justifyContent: isCollapsed ? 'center' : 'flex-start', padding: isCollapsed ? '8px 0' : '10px 20px' }}>
+          <SettingsIcon size={18} /> {!isCollapsed && 'Settings'}
         </button>
-        <button className="btn w-full" style={{ background: 'transparent', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => supabase.auth.signOut()}>
-          <LogOut size={18} /> Disconnect
+        <button className="btn w-full" style={{ background: 'transparent', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.1)', justifyContent: isCollapsed ? 'center' : 'flex-start', padding: isCollapsed ? '8px 0' : '10px 20px' }} onClick={() => supabase.auth.signOut()}>
+          <LogOut size={18} /> {!isCollapsed && 'Disconnect'}
+        </button>
+
+        <button 
+          onClick={onToggle}
+          style={{ width: '100%', marginTop: '20px', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--accent-primary)', padding: '10px 0', cursor: 'pointer', borderRadius: '8px', display: 'flex', justifyContent: 'center' }}
+        >
+          {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
         </button>
       </div>
     </aside>
@@ -54,13 +64,16 @@ export default function Sidebar({ session }) {
 
 const styles = {
   sidebar: {
-    width: 'var(--sidebar-w)',
     height: '100vh',
     display: 'flex',
     flexDirection: 'column',
     borderRight: '1px solid var(--card-border)',
-    background: 'rgba(4, 16, 20, 0.8)',
-    backdropFilter: 'blur(20px)'
+    background: 'rgba(4, 16, 20, 0.9)',
+    backdropFilter: 'blur(20px)',
+    transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    overflowX: 'hidden',
+    position: 'sticky',
+    top: 0
   },
   brand: {
     padding: '30px 24px',

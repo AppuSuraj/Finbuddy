@@ -13,6 +13,17 @@ import './App.css'; // Keeps standard import structure
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(window.innerWidth < 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024 && !isSidebarCollapsed) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isSidebarCollapsed]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -33,10 +44,12 @@ function App() {
      return <Auth />;
   }
 
+  const sidebarWidth = isSidebarCollapsed ? '80px' : '250px';
+
   return (
     <Router>
-      <div className="app-container">
-        <Sidebar session={session} />
+      <div className="app-container" style={{ gridTemplateColumns: `${sidebarWidth} 1fr` }}>
+        <Sidebar session={session} isCollapsed={isSidebarCollapsed} onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)} />
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
