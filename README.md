@@ -25,6 +25,17 @@ Heuristic processing of price and volume action to identify big player activity:
 ### 3. Oracle: AI Growth Forecast
 - **Smart Projections**: Predictive 6-month wealth trajectory based on your specific portfolio weights and live market sentiment.
 
+### 4. Alpha Performance Tracking
+- **Market Benchmarking**: Real-time comparison of your portfolio trajectory against **NIFTY 50** and **SENSEX**.
+- **Relative Momentum**: Normalized performance indexing to identify if you are outperforming the broader Indian market.
+
+### 5. Portfolio Health & Risk Monitoring
+- **Institutional Grading**: Sophisticated scoring engine (A+ to F) based on sector concentration and asset distribution.
+- **Risk Mitigation Tips**: Automated "Correction Tips" that provide actionable advice on how to fix sector tilts and diversify risk.
+
+### 6. Passive Income Monitor
+- **Cash Flow Intelligence**: Automated tracking of estimated annual and monthly dividend income across all holdings.
+
 ---
 
 ## 🛠️ Technical Stack & Tools
@@ -47,8 +58,10 @@ Finbuddy utilizes a modern, serverless architecture for maximum reliability and 
 - [x] "Analyst Note" Human-Readable Summaries.
 - [x] Premium Tier Logic for Institutional Flows.
 - [x] Oracle Predictive Forecast.
-- [ ] Dividend Yield Tracker & Income Forecast.
-- [ ] Portfolio Benchmarking (Alpha tracking vs NIFTY).
+- [x] Dividend Yield Tracker & Income Forecast.
+- [x] Portfolio Benchmarking (Alpha tracking vs NIFTY/Sensex).
+- [ ] Automated Tax-Loss Harvesting Alerts.
+- [ ] Multi-Currency Support (USD/EUR).
 
 ---
 *Created by Suraj for the Finbuddy Terminal Project.*
