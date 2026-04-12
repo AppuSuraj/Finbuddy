@@ -294,7 +294,7 @@ const finbuddyInsightsPlugin = () => ({
             }
          }
 
-         // 2. Screener.in Deep Research Fallback
+         // 2. Screener.in Deep Research Fallback (Quad-Layer Scraper)
          if (sector === 'Unknown' || sector === 'Uncategorized') {
             try {
                const cleanTicker = symbol.split('.')[0];
@@ -305,30 +305,50 @@ const finbuddyInsightsPlugin = () => ({
                
                if (response.ok) {
                   const html = await response.text();
-                  // Regex to pull Industry title text
-                  const industryMatch = html.match(/title="Industry">(.*?)<\/a>/i);
+                  
+                  // Extract all 4 potential metadata layers from Screener's Peers section
+                  const broadSectorMatch = html.match(/title="Broad Sector">(.*?)<\/a>/i);
                   const sectorMatch = html.match(/title="Sector">(.*?)<\/a>/i);
+                  const broadIndustryMatch = html.match(/title="Broad Industry">(.*?)<\/a>/i);
+                  const industryMatch = html.match(/title="Industry">(.*?)<\/a>/i);
                   
-                  let targetStr = (industryMatch ? industryMatch[1] : (sectorMatch ? sectorMatch[1] : '')).trim();
-                  
-                  if (targetStr) {
-                     // Decode common HTML entities like &amp;
-                     targetStr = targetStr.replace(/&amp;/g, '&');
+                  // Collect all potential candidate strings
+                  const candidates = [
+                    broadIndustryMatch?.[1],
+                    broadSectorMatch?.[1],
+                    industryMatch?.[1],
+                    sectorMatch?.[1]
+                  ].filter(Boolean).map(s => s.trim().replace(/&amp;/g, '&'));
 
-                     // Fuzzy match to the 58 sectors
-                     const normTarget = targetStr.toLowerCase().replace(/[^a-z0-9]/g, '');
-                     const closest = ALL_SECTORS.find(s => {
-                        const normS = s.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        return normTarget === normS || normTarget.includes(normS) || normS.includes(normTarget);
-                     });
+                  if (candidates.length > 0) {
+                     let found = false;
+                     // Primary Pass: Look for high-precision fuzzy matches in the 58-sector list
+                     for (const candidate of candidates) {
+                        const normTarget = candidate.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        const closest = ALL_SECTORS.find(s => {
+                           const normS = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+                           return normTarget === normS || normTarget.includes(normS) || normS.includes(normTarget);
+                        });
+                        
+                        if (closest) {
+                           sector = closest;
+                           found = true;
+                           break;
+                        }
+                     }
 
-                     if (closest) sector = closest;
-                     else if (targetStr.toLowerCase().includes('defense')) sector = 'Aerospace & Defense';
-                     else if (targetStr.toLowerCase().includes('bank')) sector = 'Banks';
-                     else if (targetStr.toLowerCase().includes('it')) sector = 'IT - Services';
-                     else if (targetStr.toLowerCase().includes('software')) sector = 'IT - Software';
-                     else if (targetStr.toLowerCase().includes('pharma')) sector = 'Pharmaceuticals & Biotechnology';
-                     else sector = targetStr; // Use Screener's string directly as a backup
+                     // Secondary Pass: Keyword-based catch-all for niche strings
+                     if (!found) {
+                        const allCandidatesText = candidates.join(' ').toLowerCase();
+                        if (allCandidatesText.includes('defense') || allCandidatesText.includes('defence')) sector = 'Aerospace & Defense';
+                        else if (allCandidatesText.includes('bank')) sector = 'Banks';
+                        else if (allCandidatesText.includes('it-') || allCandidatesText.includes('software')) sector = 'IT - Software';
+                        else if (allCandidatesText.includes('it services')) sector = 'IT - Services';
+                        else if (allCandidatesText.includes('petroleum')) sector = 'Petroleum Products';
+                        else if (allCandidatesText.includes('energy') || allCandidatesText.includes('power')) sector = 'Power';
+                        else if (allCandidatesText.includes('construction') && !allCandidatesText.includes('vehicle')) sector = 'Construction';
+                        else sector = candidates[0]; // Fallback to Screener's primary classification
+                     }
                   }
                }
             } catch (e) {

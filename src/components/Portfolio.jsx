@@ -76,10 +76,26 @@ export default function Portfolio({ session }) {
   const [fetchingInsights, setFetchingInsights] = useState(false);
   const [deepScanStates, setDeepScanStates] = useState({});
   const [isEditingSector, setIsEditingSector] = useState(false);
+  const [cooldown, setCooldown] = useState(0); 
+  const isAdmin = session?.user?.email === 'surajsan1998@gmail.com';
 
   useEffect(() => {
     fetchAssets();
+    
+    // Initialize Cooldown from LocalStorage
+    const lastSync = localStorage.getItem(`finbuddy_last_sync_${session.user.id}`);
+    if (lastSync) {
+      const diff = Math.floor((Date.now() - Number(lastSync)) / 1000);
+      if (diff < 300) setCooldown(300 - diff);
+    }
   }, []);
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
 
   async function fetchAssets() {
     const { data, error } = await supabase.from('assets').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true });
@@ -138,7 +154,12 @@ export default function Portfolio({ session }) {
     }
   };
 
-  const handleRefreshLivePrices = async () => {
+  async function handleRefreshLivePrices() {
+    if (!isAdmin && cooldown > 0) {
+       alert(`SECURITY COOLDOWN: Please wait ${Math.floor(cooldown / 60)}m ${cooldown % 60}s before syncing again.`);
+       return;
+    }
+
     setRefreshing(true);
     let updatedCount = 0;
     const newAllocations = [...assetAllocation];
@@ -204,6 +225,12 @@ export default function Portfolio({ session }) {
     
     setAssetAllocation([...newAllocations]);
     setRefreshing(false);
+    
+    if (!isAdmin) {
+       setCooldown(300);
+       localStorage.setItem(`finbuddy_last_sync_${session.user.id}`, Date.now().toString());
+    }
+
     if (updatedCount > 0) alert(`Successfully synced ${updatedCount} assets dynamically via Parallel Market Oracle!`);
     else alert('Oracle Timeout or no valid stock tickers identified.');
   };
@@ -297,8 +324,13 @@ export default function Portfolio({ session }) {
           <p className="text-muted">Track and analyze your live wealth allocation.</p>
         </div>
         <div className="flex gap-4">
-          <button className="btn btn-secondary" onClick={handleRefreshLivePrices} disabled={refreshing}>
-            <RefreshCw size={18} className={refreshing ? "spin-animation" : ""} /> {refreshing ? 'Deep Researching via Screener...' : 'Live Quotes'}
+          <button 
+            className="btn btn-secondary" 
+            onClick={handleRefreshLivePrices} 
+            disabled={refreshing || (!isAdmin && cooldown > 0)}
+          >
+            <RefreshCw size={18} className={refreshing ? "spin-animation" : ""} /> 
+            {refreshing ? 'Deep Researching via Screener...' : (cooldown > 0 && !isAdmin ? `Cooldown (${Math.floor(cooldown/60)}m)` : 'Live Quotes')}
           </button>
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : <><Plus size={18}/> Add Asset</>}
