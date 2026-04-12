@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/finance/:symbol", "destination": "/api/finance.js?symbol=:symbol" }
+  ]
+}
