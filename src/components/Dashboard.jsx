@@ -91,18 +91,29 @@ export default function Dashboard({ session }) {
 
       try {
         setOracleSyncing(true);
-        const oRes = await fetch(`/api/oracle?names=${topNames}`);
+        const oRes = await fetch(`/api/oracle?names=${encodeURIComponent(sorted.slice(0, 5).map(a => a.name.split('(')[0].trim()).join(','))}`);
         const pred = await oRes.json();
         setOracleData(pred);
+        // Always build chart — baseline 4% renders even when sentiment is neutral
         const months = ['Today', 'M+1', 'M+2', 'M+3', 'M+4', 'M+5', 'M+6'];
         let cur = total;
-        const mg = pred.growthPercent / 6;
+        const mg = (pred.growthPercent || 4.0) / 6;
         setProjectionTimeline(months.map(m => {
           const point = { month: m, 'Projected Value': Math.round(cur) };
           cur = cur * (1 + mg / 100);
           return point;
         }));
-      } catch (e) {}
+      } catch (e) {
+        // Fallback: always render baseline 4% chart if oracle fails
+        const months = ['Today', 'M+1', 'M+2', 'M+3', 'M+4', 'M+5', 'M+6'];
+        let cur = total;
+        setOracleData({ growthPercent: 4.0 });
+        setProjectionTimeline(months.map(m => {
+          const point = { month: m, 'Projected Value': Math.round(cur) };
+          cur = cur * (1 + (4.0 / 6) / 100);
+          return point;
+        }));
+      }
       setOracleSyncing(false);
     }
     setLoading(false);
