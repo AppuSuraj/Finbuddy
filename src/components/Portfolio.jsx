@@ -77,6 +77,7 @@ export default function Portfolio({ session }) {
   const [deepScanStates, setDeepScanStates] = useState({});
   const [isEditingSector, setIsEditingSector] = useState(false);
   const [cooldown, setCooldown] = useState(0); 
+  const [selectedSectorFilter, setSelectedSectorFilter] = useState(null);
   const isAdmin = session?.user?.email?.toLowerCase() === 'surajsan1998@gmail.com';
 
   useEffect(() => {
@@ -134,6 +135,11 @@ export default function Portfolio({ session }) {
   const filteredAndSortedAssets = useMemo(() => {
     let result = assetAllocation.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()));
     
+    // Apply Sector Filter if active
+    if (selectedSectorFilter) {
+      result = result.filter(a => (a.sector || 'Uncategorized') === selectedSectorFilter);
+    }
+
     if (sortBy === 'value-desc') {
       result.sort((a, b) => Number(b.value) - Number(a.value));
     } else if (sortBy === 'value-asc') {
@@ -142,7 +148,7 @@ export default function Portfolio({ session }) {
       result.sort((a, b) => a.name.localeCompare(b.name));
     }
     return result;
-  }, [assetAllocation, searchQuery, sortBy]);
+  }, [assetAllocation, searchQuery, sortBy, selectedSectorFilter]);
 
   // Yahoo Finance Fetcher Layer
   const fetchPrice = async (ticker, suffix) => {
@@ -234,6 +240,31 @@ export default function Portfolio({ session }) {
 
     if (updatedCount > 0) alert(`Successfully synced ${updatedCount} assets dynamically via Parallel Market Oracle!`);
     else alert('Oracle Timeout or no valid stock tickers identified.');
+  };
+
+  const handleDeepScrutiny = async (asset) => {
+    // Parse ticker name
+    const match = asset.name.match(/(.+?)\s*\(\s*(\d+(?:\.\d+)?)\s*shares\)/i);
+    const ticker = match ? match[1].trim() : asset.name;
+    
+    setRefreshing(true); // Re-use refreshing state for global UI feedback
+    try {
+       // Call profile with .NS first, then .BO if needed
+       const res = await fetch(`/api/profile?symbol=${ticker}.NS`);
+       const data = await res.json();
+       
+       if (data.sector && data.sector !== 'Unknown') {
+          await supabase.from('assets').update({ sector: data.sector }).eq('id', asset.id);
+          alert(`ORACLE SUCCESS: ${ticker} classified as "${data.sector}"`);
+          fetchAssets();
+          if (selectedAsset?.id === asset.id) setSelectedAsset({...selectedAsset, sector: data.sector});
+       } else {
+          alert(`ORACLE FAILURE: No public metadata found for ${ticker}. Manual override required.`);
+       }
+    } catch(e) {
+       alert("Network Interruption during Deep Scrutiny.");
+    }
+    setRefreshing(false);
   };
 
   const handleSelectAsset = async (asset) => {
@@ -380,7 +411,7 @@ export default function Portfolio({ session }) {
                 <Layers size={20} className="text-secondary" /> Asset Allocation
               </h3>
               <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '8px' }}>
-                <button onClick={() => setChartView('asset')} style={{ padding: '6px 12px', background: chartView === 'asset' ? 'var(--accent-primary)' : 'transparent', color: chartView === 'asset' ? '#000' : '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>Assets</button>
+                <button onClick={() => { setChartView('asset'); setSelectedSectorFilter(null); }} style={{ padding: '6px 12px', background: chartView === 'asset' ? 'var(--accent-primary)' : 'transparent', color: chartView === 'asset' ? '#000' : '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>Assets</button>
                 <button onClick={() => setChartView('sector')} style={{ padding: '6px 12px', background: chartView === 'sector' ? 'var(--accent-primary)' : 'transparent', color: chartView === 'sector' ? '#000' : '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>Sectors</button>
               </div>
             </div>
@@ -401,9 +432,13 @@ export default function Portfolio({ session }) {
                         key={`cell-${index}`} 
                         fill={entry.color} 
                         onClick={() => {
-                          if (!entry.isOther && !entry.isSector) handleSelectAsset(entry);
+                           if (chartView === 'sector') {
+                              setSelectedSectorFilter(entry.name);
+                           } else if (!entry.isOther && !entry.isSector) {
+                              handleSelectAsset(entry);
+                           }
                         }}
-                        style={{ cursor: entry.isOther || entry.isSector ? 'default' : 'pointer', outline: 'none' }}
+                        style={{ cursor: entry.isOther ? 'default' : 'pointer', outline: 'none' }}
                       />
                     ))}
                   </Pie>
@@ -425,6 +460,14 @@ export default function Portfolio({ session }) {
             <div className="flex items-center justify-between" style={{ marginBottom: '30px' }}>
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <TrendingUp size={20} className="text-secondary" /> Holdings Vault
+                {selectedSectorFilter && (
+                   <span 
+                    onClick={() => setSelectedSectorFilter(null)}
+                    style={{ fontSize: '11px', background: 'var(--accent-primary)', color: '#000', padding: '2px 8px', borderRadius: '12px', cursor: 'pointer', marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                   >
+                     Viewing {selectedSectorFilter} ×
+                   </span>
+                 )}
               </h3>
               
               <div className="flex gap-2">
@@ -562,9 +605,14 @@ export default function Portfolio({ session }) {
                 </h2>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     {!isEditingSector ? (
-                       <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setIsEditingSector(true)}>
-                          <Edit3 size={14} /> {selectedAsset.sector || 'Uncategorized'}
-                       </button>
+                        <div className="flex gap-2">
+                           <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => handleDeepScrutiny(selectedAsset)}>
+                              <ShieldCheck size={14} className="text-secondary" /> Deep Scrutiny
+                           </button>
+                           <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setIsEditingSector(true)}>
+                              <Edit3 size={14} /> {selectedAsset.sector || 'Uncategorized'}
+                           </button>
+                        </div>
                     ) : (
                        <div className="flex items-center gap-2">
                           <select 

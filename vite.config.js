@@ -300,7 +300,8 @@ const finbuddyInsightsPlugin = () => ({
                const cleanTicker = symbol.split('.')[0];
                const screenerUrl = `https://www.screener.in/company/${cleanTicker}/`;
                const response = await fetch(screenerUrl, {
-                  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+                  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' },
+                  signal: AbortSignal.timeout(12000) // 12 second deep-scrutiny window
                });
                
                if (response.ok) {
@@ -344,9 +345,10 @@ const finbuddyInsightsPlugin = () => ({
                         else if (allCandidatesText.includes('bank')) sector = 'Banks';
                         else if (allCandidatesText.includes('it-') || allCandidatesText.includes('software')) sector = 'IT - Software';
                         else if (allCandidatesText.includes('it services')) sector = 'IT - Services';
-                        else if (allCandidatesText.includes('petroleum')) sector = 'Petroleum Products';
+                        else if (allCandidatesText.includes('petroleum') || allCandidatesText.includes('refiner') || allCandidatesText.includes('marketing')) sector = 'Petroleum Products';
                         else if (allCandidatesText.includes('energy') || allCandidatesText.includes('power')) sector = 'Power';
                         else if (allCandidatesText.includes('construction') && !allCandidatesText.includes('vehicle')) sector = 'Construction';
+                        else if (allCandidatesText.includes('finance') || allCandidatesText.includes('invest')) sector = 'Finance';
                         else sector = candidates[0]; // Fallback to Screener's primary classification
                      }
                   }
