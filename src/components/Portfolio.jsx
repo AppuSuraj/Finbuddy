@@ -635,71 +635,34 @@ export default function Portfolio({ session }) {
                <div style={{ padding: '60px 0', textAlign: 'center' }}>
                  <p className="text-muted text-lg flex items-center justify-center gap-3"><RefreshCw size={24} className="spin-animation" /> Scraping Financial Terminals...</p>
                </div>
-             ) : insightsData?.error || (!insightsData?.profile && (!insightsData?.news || insightsData?.news.length === 0)) ? (
-               <p className="text-danger mt-4 text-center">Failed to load detailed insights. Ensure API proxy is running and ticker is publicly listed.</p>
              ) : insightsData ? (
                <div>
-                 <div style={{ 
-                   display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '40px' 
-                 }}>
-                    {/* Row 1 */}
-                    <div className="glass-panel" style={{ padding: '20px' }}>
-                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Market Cap</p>
-                       <p className="font-semibold" style={{ fontSize: '22px' }}>
-                         {insightsData.profile?.summaryDetail?.marketCap ? `₹${(insightsData.profile.summaryDetail.marketCap / 10000000).toFixed(0)} Cr.` : 'N/A'}
+                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                   {[
+                     { label: 'Current Price', value: insightsData.profile?.currentPrice ? `₹${Number(insightsData.profile.currentPrice).toLocaleString('en-IN')}` : null, accent: true },
+                     { label: 'Market Cap', value: insightsData.profile?.marketCap ? `₹${Number(insightsData.profile.marketCap).toLocaleString('en-IN')} Cr.` : null },
+                     { label: '52W High / Low', value: insightsData.profile?.high52w && insightsData.profile?.low52w ? `₹${Number(insightsData.profile.high52w).toLocaleString('en-IN')} / ₹${Number(insightsData.profile.low52w).toLocaleString('en-IN')}` : null },
+                     { label: 'Stock P/E', value: insightsData.profile?.pe ? Number(insightsData.profile.pe).toFixed(2) : null },
+                     { label: 'Book Value', value: insightsData.profile?.bookValue ? `₹${Number(insightsData.profile.bookValue).toLocaleString('en-IN')}` : null },
+                     { label: 'Dividend Yield', value: insightsData.profile?.dividendYield ? `${insightsData.profile.dividendYield} %` : null },
+                     { label: 'ROCE', value: insightsData.profile?.roce ? `${insightsData.profile.roce} %` : null },
+                     { label: 'ROE', value: insightsData.profile?.roe ? `${insightsData.profile.roe} %` : null },
+                     { label: 'Face Value', value: insightsData.profile?.faceValue ? `₹${insightsData.profile.faceValue}` : null },
+                   ].map((kpi, i) => (
+                     <div key={i} className="glass-panel" style={{ padding: '20px' }}>
+                       <p className="text-muted text-sm" style={{ marginBottom: '6px' }}>{kpi.label}</p>
+                       <p style={{ fontSize: '20px', fontWeight: 700, color: kpi.accent ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
+                         {kpi.value || <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '16px' }}>—</span>}
                        </p>
-                    </div>
-                    <div className="glass-panel" style={{ padding: '20px' }}>
-                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Current Price</p>
-                       <p className="font-semibold" style={{ fontSize: '22px', color: 'var(--accent-primary)' }}>
-                         {insightsData.profile?.price?.regularMarketPrice ? `₹${insightsData.profile.price.regularMarketPrice.toLocaleString('en-IN')}` : 'N/A'}
-                       </p>
-                    </div>
-                    <div className="glass-panel" style={{ padding: '20px' }}>
-                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>High / Low (52w)</p>
-                       <p className="font-semibold" style={{ fontSize: '22px' }}>
-                         {insightsData.profile?.summaryDetail?.fiftyTwoWeekHigh && insightsData.profile?.summaryDetail?.fiftyTwoWeekLow ? 
-                           `₹${insightsData.profile.summaryDetail.fiftyTwoWeekHigh.toLocaleString('en-IN')} / ₹${insightsData.profile.summaryDetail.fiftyTwoWeekLow.toLocaleString('en-IN')}` : 'N/A'
-                         }
-                       </p>
-                    </div>
-
-                    {/* Row 2 */}
-                    <div className="glass-panel" style={{ padding: '20px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Stock P/E</p>
-                       <p className="font-semibold" style={{ fontSize: '22px' }}>{insightsData.profile?.summaryDetail?.trailingPE?.toFixed(2) || 'N/A'}</p>
-                    </div>
-                    <div className="glass-panel" style={{ padding: '20px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Book Value</p>
-                       <p className="font-semibold" style={{ fontSize: '22px' }}>
-                         {insightsData.profile?.defaultKeyStatistics?.bookValue ? `₹${insightsData.profile.defaultKeyStatistics.bookValue.toFixed(2)}` : 'N/A'}
-                       </p>
-                    </div>
-                    <div className="glass-panel" style={{ padding: '20px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Dividend Yield</p>
-                       <p className="font-semibold" style={{ fontSize: '22px' }}>
-                         {insightsData.profile?.summaryDetail?.dividendYield ? `${(insightsData.profile.summaryDetail.dividendYield * 100).toFixed(2)} %` : 'N/A'}
-                       </p>
-                    </div>
-
-                    {/* Row 3 */}
-                    <div className="glass-panel" style={{ padding: '20px' }}>
-                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>ROCE (ROA Proxy)</p>
-                       <p className="font-semibold" style={{ fontSize: '22px' }}>
-                         {insightsData.profile?.financialData?.returnOnAssets ? `${(insightsData.profile.financialData.returnOnAssets * 100).toFixed(1)} %` : 'N/A'}
-                       </p>
-                    </div>
-                    <div className="glass-panel" style={{ padding: '20px' }}>
-                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>ROE</p>
-                       <p className="font-semibold" style={{ fontSize: '22px' }}>
-                         {insightsData.profile?.financialData?.returnOnEquity ? `${(insightsData.profile.financialData.returnOnEquity * 100).toFixed(1)} %` : 'N/A'}
-                       </p>
-                    </div>
-                    <div className="glass-panel" style={{ padding: '20px' }}>
-                       <p className="text-muted text-sm" style={{ marginBottom: '4px' }}>Face Value</p>
-                       <p className="font-semibold" style={{ fontSize: '22px' }}>N/A</p>
-                    </div>
+                     </div>
+                   ))}
                  </div>
+                 {insightsData.profile?.dataSource && (
+                   <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', marginBottom: '24px', textAlign: 'right' }}>
+                     Data sourced from {insightsData.profile.dataSource}
+                   </p>
+                 )}
+
                  
                  <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Newspaper size={20} color="var(--accent-primary)" /> Latest Market Intelligence
