@@ -735,20 +735,28 @@ export default function Portfolio({ session }) {
 
                          {/* DMA + RSI Grid */}
                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-                           {deepScrutinyData.dma50 && (
-                             <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '14px', border: `1px solid ${deepScrutinyData.aboveDma50 ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}` }}>
-                               <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '1px' }}>DMA 50</p>
-                               <p style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: deepScrutinyData.aboveDma50 ? '#10b981' : '#ef4444' }}>₹{deepScrutinyData.dma50.toLocaleString('en-IN')}</p>
-                               <p style={{ fontSize: '11px', margin: '4px 0 0', color: deepScrutinyData.aboveDma50 ? '#10b981' : '#ef4444' }}>{deepScrutinyData.aboveDma50 ? '▲' : '▼'} {Math.abs(deepScrutinyData.dma50Diff)}% {deepScrutinyData.aboveDma50 ? 'above' : 'below'}</p>
-                             </div>
-                           )}
-                           {deepScrutinyData.dma200 && (
-                             <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '14px', border: `1px solid ${deepScrutinyData.aboveDma200 ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}` }}>
-                               <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '1px' }}>DMA 200</p>
-                               <p style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: deepScrutinyData.aboveDma200 ? '#10b981' : '#ef4444' }}>₹{deepScrutinyData.dma200.toLocaleString('en-IN')}</p>
-                               <p style={{ fontSize: '11px', margin: '4px 0 0', color: deepScrutinyData.aboveDma200 ? '#10b981' : '#ef4444' }}>{deepScrutinyData.aboveDma200 ? '▲' : '▼'} {Math.abs(deepScrutinyData.dma200Diff)}% {deepScrutinyData.aboveDma200 ? 'above' : 'below'}</p>
-                             </div>
-                           )}
+                           <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '14px', border: `1px solid ${deepScrutinyData.dma50 ? (deepScrutinyData.aboveDma50 ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)') : 'rgba(255,255,255,0.05)'}` }}>
+                             <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '1px' }}>DMA 50</p>
+                             {deepScrutinyData.dma50 ? (
+                               <>
+                                 <p style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: deepScrutinyData.aboveDma50 ? '#10b981' : '#ef4444' }}>₹{deepScrutinyData.dma50.toLocaleString('en-IN')}</p>
+                                 <p style={{ fontSize: '11px', margin: '4px 0 0', color: deepScrutinyData.aboveDma50 ? '#10b981' : '#ef4444' }}>{deepScrutinyData.aboveDma50 ? '▲' : '▼'} {Math.abs(deepScrutinyData.dma50Diff)}% {deepScrutinyData.aboveDma50 ? 'above' : 'below'}</p>
+                               </>
+                             ) : (
+                               <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.2)', margin: 0 }}>Data Pending</p>
+                             )}
+                           </div>
+                           <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '14px', border: `1px solid ${deepScrutinyData.dma200 ? (deepScrutinyData.aboveDma200 ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)') : 'rgba(255,255,255,0.05)'}` }}>
+                             <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '1px' }}>DMA 200</p>
+                             {deepScrutinyData.dma200 ? (
+                               <>
+                                 <p style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: deepScrutinyData.aboveDma200 ? '#10b981' : '#ef4444' }}>₹{deepScrutinyData.dma200.toLocaleString('en-IN')}</p>
+                                 <p style={{ fontSize: '11px', margin: '4px 0 0', color: deepScrutinyData.aboveDma200 ? '#10b981' : '#ef4444' }}>{deepScrutinyData.aboveDma200 ? '▲' : '▼'} {Math.abs(deepScrutinyData.dma200Diff)}% {deepScrutinyData.aboveDma200 ? 'above' : 'below'}</p>
+                               </>
+                             ) : (
+                               <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.2)', margin: 0 }}>Data Pending</p>
+                             )}
+                           </div>
                            {deepScrutinyData.rsi && (
                              <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '14px', border: `1px solid ${deepScrutinyData.rsiZone === 'Overbought' ? 'rgba(239,68,68,0.25)' : deepScrutinyData.rsiZone === 'Oversold' ? 'rgba(16,185,129,0.25)' : 'rgba(234,179,8,0.25)'}` }}>
                                <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '1px' }}>RSI (14)</p>
@@ -756,13 +764,17 @@ export default function Portfolio({ session }) {
                                <p style={{ fontSize: '11px', margin: '4px 0 0', color: 'rgba(255,255,255,0.4)' }}>{deepScrutinyData.rsiZone}</p>
                              </div>
                            )}
-                           {(deepScrutinyData.momentum1m !== null || deepScrutinyData.momentum3m !== null) && (
-                             <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                               <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '1px' }}>Momentum</p>
-                               {deepScrutinyData.momentum1m !== null && <p style={{ fontSize: '13px', margin: '0 0 4px', color: deepScrutinyData.momentum1m >= 0 ? '#10b981' : '#ef4444' }}>1M: {deepScrutinyData.momentum1m >= 0 ? '+' : ''}{deepScrutinyData.momentum1m}%</p>}
-                               {deepScrutinyData.momentum3m !== null && <p style={{ fontSize: '13px', margin: 0, color: deepScrutinyData.momentum3m >= 0 ? '#10b981' : '#ef4444' }}>3M: {deepScrutinyData.momentum3m >= 0 ? '+' : ''}{deepScrutinyData.momentum3m}%</p>}
-                             </div>
-                           )}
+                           <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                             <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '1px' }}>Momentum</p>
+                             {deepScrutinyData.momentum1m !== null ? (
+                               <>
+                                 <p style={{ fontSize: '13px', margin: '0 0 4px', color: deepScrutinyData.momentum1m >= 0 ? '#10b981' : '#ef4444' }}>1M: {deepScrutinyData.momentum1m >= 0 ? '+' : ''}{deepScrutinyData.momentum1m}%</p>
+                                 {deepScrutinyData.momentum3m !== null && <p style={{ fontSize: '13px', margin: 0, color: deepScrutinyData.momentum3m >= 0 ? '#10b981' : '#ef4444' }}>3M: {deepScrutinyData.momentum3m >= 0 ? '+' : ''}{deepScrutinyData.momentum3m}%</p>}
+                               </>
+                             ) : (
+                               <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.2)', margin: 0 }}>Limited History</p>
+                             )}
+                           </div>
                          </div>
 
                          {/* Institutional Flow & HNI */}
@@ -813,9 +825,14 @@ export default function Portfolio({ session }) {
                            )}
                          </div>
                        </>
-                     ) : (
-                       <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>Insufficient historical data for technical analysis.</p>
-                     )}
+                     ) : deepScrutinyData ? (
+                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                          <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '14px', marginBottom: '8px' }}>🚀 This appears to be a very newly listed stock.</p>
+                          <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px' }}>Technical indicators will automatically appear once enough historical trading days are recorded.</p>
+                        </div>
+                      ) : (
+                        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>Error loading technical profile.</p>
+                      )}
                    </div>
                  )}
 

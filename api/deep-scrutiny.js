@@ -84,7 +84,7 @@ export default async function handler(req, res) {
     const volumes = (quotes.volume || []).filter(v => v != null);
     const currentPrice = meta.regularMarketPrice;
 
-    if (closes.length < 20) return res.status(200).json({ error: 'insufficient_history', currentPrice });
+    if (closes.length < 5) return res.status(200).json({ error: 'insufficient_history', currentPrice });
 
     // ── Moving Averages ──
     const dma50 = closes.length >= 50 ? Math.round(average(closes.slice(-50)) * 100) / 100 : null;
@@ -121,9 +121,11 @@ export default async function handler(req, res) {
       else if (currentPrice < dma50 && dma50 < dma200) { trend = 'Strong Downtrend'; trendDesc = 'Price is below both moving averages. Bearish pressure dominates.'; }
       else if (currentPrice > dma50 && dma50 < dma200) { trend = 'Short-Term Recovery'; trendDesc = 'Price has recovered above DMA50 but remains below the long-term DMA200.'; }
       else if (currentPrice < dma50 && dma50 > dma200) { trend = 'Short-Term Pullback'; trendDesc = 'Price has pulled back below DMA50 but long-term trend remains intact above DMA200.'; }
-    } else if (dma50) {
       trend = currentPrice > dma50 ? 'Above DMA50' : 'Below DMA50';
       trendDesc = currentPrice > dma50 ? 'Price is above the 50-day average — short-term bullish.' : 'Price is below the 50-day average — short-term caution.';
+    } else {
+      trend = 'Recently Listed';
+      trendDesc = 'This stock has limited historical data. Long-term trend indicators (DMA 50/200) are not yet available.';
     }
 
     // ── Volume Trend ──
