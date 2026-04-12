@@ -77,18 +77,20 @@ export default function Portfolio({ session }) {
   const [deepScanStates, setDeepScanStates] = useState({});
   const [isEditingSector, setIsEditingSector] = useState(false);
   const [cooldown, setCooldown] = useState(0); 
-  const isAdmin = session?.user?.email === 'surajsan1998@gmail.com';
+  const isAdmin = session?.user?.email?.toLowerCase() === 'surajsan1998@gmail.com';
 
   useEffect(() => {
     fetchAssets();
     
-    // Initialize Cooldown from LocalStorage
-    const lastSync = localStorage.getItem(`finbuddy_last_sync_${session.user.id}`);
-    if (lastSync) {
-      const diff = Math.floor((Date.now() - Number(lastSync)) / 1000);
-      if (diff < 300) setCooldown(300 - diff);
+    // Initialize Cooldown from LocalStorage (Safe check)
+    if (session?.user?.id) {
+       const lastSync = localStorage.getItem(`finbuddy_last_sync_${session.user.id}`);
+       if (lastSync) {
+         const diff = Math.floor((Date.now() - Number(lastSync)) / 1000);
+         if (diff < 300) setCooldown(300 - diff);
+       }
     }
-  }, []);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (cooldown > 0) {
@@ -183,7 +185,6 @@ export default function Portfolio({ session }) {
     };
 
     let targetAllocations = newAllocations;
-    const isAdmin = session?.user?.email === 'surajsan1998@gmail.com';
     
     if (!isAdmin && targetAllocations.length > 5) {
        targetAllocations = newAllocations.slice(0, 5);
@@ -226,7 +227,7 @@ export default function Portfolio({ session }) {
     setAssetAllocation([...newAllocations]);
     setRefreshing(false);
     
-    if (!isAdmin) {
+    if (!isAdmin && session?.user?.id) {
        setCooldown(300);
        localStorage.setItem(`finbuddy_last_sync_${session.user.id}`, Date.now().toString());
     }
