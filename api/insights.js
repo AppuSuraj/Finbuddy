@@ -17,87 +17,109 @@ function deepScore(text) {
   return score;
 }
 
-// Robust number extractor from Screener.in text
-function extractNum(html, label) {
-  // Matches patterns like: <td>Market Cap</td><td>12,345.67</td> or variations
-  const re = new RegExp(`${label}[^<]*</[^>]+>[^<]*<[^>]+>\\s*([\\d,\\.]+)`, 'i');
-  const m = html.match(re);
-  if (m) return parseFloat(m[1].replace(/,/g, ''));
+// Extract a value from Screener.in HTML using the label text
+// Screener structure: <span class="name">Market Cap</span> ... <span>12,345</span> Cr.
+function extractScreenerVal(html, label) {
+  // Escape regex special chars in label
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Primary: label in .name span followed by number-format value span
+  const patterns = [
+    // >Label</span ...<span ...><span>123</span>
+    new RegExp(`>${escaped}<\\/span[\\s\\S]{0,200}?<span[^>]*>([\\d,\\.]+)<\\/span>`, 'i'),
+    // Label anywhere followed by a <span> with digits within 300 chars
+    new RegExp(`${escaped}[\\s\\S]{0,300}?<span[^>]*class="[^"]*number[^"]*"[^>]*>[^<]*<span>([\\d,\\.]+)`, 'i'),
+    // Fallback: label then within 200 chars a standalone number in span
+    new RegExp(`${escaped}[^<]{0,200}<span>([\\d,\\.]+)<\\/span>`, 'i'),
+  ];
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (m?.[1]) {
+      const n = parseFloat(m[1].replace(/,/g, ''));
+      if (!isNaN(n)) return n;
+    }
+  }
   return null;
 }
 
-// Fetch Screener.in page and extract all fundamentals
 async function scrapeScreener(ticker) {
-  try {
-    const ctrl = new AbortController();
-    const id = setTimeout(() => ctrl.abort(), 8000);
+  const urls = [
+    `https://www.screener.in/company/${ticker}/consolidated/`,
+    `https://www.screener.in/company/${ticker}/`,
+  ];
 
-    const res = await fetch(`https://www.screener.in/company/${ticker}/`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html',
-      },
-      signal: ctrl.signal,
-    });
-    clearTimeout(id);
+  for (const url of urls) {
+    try {
+      const ctrl = new AbortController();
+      const id = setTimeout(() => ctrl.abort(), 9000);
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          'Referer': 'https://www.screener.in/',
+        },
+        signal: ctrl.signal,
+      });
+      clearTimeout(id);
+      if (!res.ok) continue;
+      const html = await res.text();
 
-    if (!res.ok) return null;
-    const html = await res.text();
+      // Check if we got a valid company page (not a 404/redirect)
+      if (!html.includes('top-ratios') && !html.includes('company-ratios')) continue;
 
-    // Extract company name
-    const nameMatch = html.match(/<h1[^>]*class="[^"]*h2[^"]*"[^>]*>\s*([^<]+)/i) ||
-      html.match(/<title>([^|<]+)/i);
-    const companyName = nameMatch?.[1]?.trim().split('|')[0].trim() || ticker;
+      // Extract company name from <h1> or title
+      const nameMatch = html.match(/<h1[^>]*>\s*([^<\n]+)/i) || html.match(/<title>([^|<]+)/i);
+      const companyName = nameMatch?.[1]?.trim()?.split('|')[0]?.trim() || ticker;
 
-    // Screener.in shows numbers in the #top-ratios section
-    // Regex patterns for Screener's specific layout
-    const getVal = (label) => {
-      const patterns = [
-        new RegExp(`>${label}<\\/span>[^<]*<span[^>]*>\\s*([\\d,\\.]+)`, 'i'),
-        new RegExp(`li[^>]*>\\s*<span[^>]*>[^<]*${label}[^<]*<\\/span>[^<]*<span[^>]*>\\s*([\\d,\\.]+)`, 'i'),
-        new RegExp(`${label}[^<]{0,80}<span[^>]*>\\s*([\\d,\\.]+)`, 'i'),
-      ];
-      for (const re of patterns) {
-        const m = html.match(re);
-        if (m) return parseFloat(m[1].replace(/,/g, ''));
+      // Extract 52W High / Low — Screener shows "High / Low" label
+      let high52w = null, low52w = null;
+      const hiloMatch = html.match(/High\s*\/\s*Low[\s\S]{0,300}?<span>\s*([\d,\.]+)\s*<\/span>\s*\/\s*<span>\s*([\d,\.]+)\s*<\/span>/i);
+      if (hiloMatch) {
+        high52w = parseFloat(hiloMatch[1].replace(/,/g, ''));
+        low52w = parseFloat(hiloMatch[2].replace(/,/g, ''));
       }
-      return null;
-    };
 
-    // Extract 52W High and Low from Screener
-    const hiLoMatch = html.match(/52-week High\s*<\/span>[^<]*<span[^>]*>\s*([\d,\.]+)/i) ||
-      html.match(/High\s*\/\s*Low[^<]*<\/span>[^<]*<span[^>]*>\s*([\d,\.]+)\s*\/\s*([\d,\.]+)/i);
-    let high52w = null, low52w = null;
-    if (hiLoMatch) {
-      high52w = parseFloat(hiLoMatch[1]?.replace(/,/g, ''));
-      low52w = hiLoMatch[2] ? parseFloat(hiLoMatch[2]?.replace(/,/g, '')) : null;
+      // Market Cap — Screener shows in Cr already
+      const marketCap = extractScreenerVal(html, 'Market Cap');
+
+      // Current Price
+      const currentPriceMatch = html.match(/Current Price[\s\S]{0,200}?<span>\s*([\d,\.]+)/i);
+      const currentPrice = currentPriceMatch ? parseFloat(currentPriceMatch[1].replace(/,/g, '')) : null;
+
+      // P/E — "Stock P/E" label
+      const pe = extractScreenerVal(html, 'Stock P\\/E') || extractScreenerVal(html, 'P\\/E');
+
+      // Book Value
+      const bookValue = extractScreenerVal(html, 'Book Value');
+
+      // Dividend Yield
+      const divYieldMatch = html.match(/Dividend Yield[\s\S]{0,200}?<span>\s*([\d,\.]+)/i);
+      const dividendYield = divYieldMatch ? parseFloat(divYieldMatch[1].replace(/,/g, '')) : null;
+
+      // ROCE
+      const roceMatch = html.match(/ROCE[\s\S]{0,200}?<span>\s*([\d,\.]+)/i);
+      const roce = roceMatch ? parseFloat(roceMatch[1].replace(/,/g, '')) : null;
+
+      // ROE
+      const roeMatch = html.match(/ROE[\s\S]{0,200}?<span>\s*([\d,\.]+)/i);
+      const roe = roeMatch ? parseFloat(roeMatch[1].replace(/,/g, '')) : null;
+
+      // Face Value
+      const fvMatch = html.match(/Face Value[\s\S]{0,200}?<span>\s*([\d,\.]+)/i);
+      const faceValue = fvMatch ? parseFloat(fvMatch[1].replace(/,/g, '')) : null;
+
+      if (marketCap || pe || roe || roce) {
+        return { companyName, marketCap, currentPrice, high52w, low52w, pe, bookValue, dividendYield, roce, roe, faceValue };
+      }
+    } catch (e) {
+      // Try next URL
     }
-
-    // Current price
-    const priceMatch = html.match(/#chart-container[^>]*>[^<]*<span[^>]*>([^<]+)</i) ||
-      html.match(/current[\s-]price[^<]*<[^>]*>\s*([\d,\.]+)/i) ||
-      html.match(/"currentPrice":\s*([\d\.]+)/i);
-    const currentPrice = priceMatch ? parseFloat(priceMatch[1]?.replace(/,/g, '')) : null;
-
-    return {
-      companyName,
-      marketCap: getVal('Market Cap'),
-      currentPrice,
-      high52w,
-      low52w,
-      pe: getVal('Stock P\\/E') || getVal('P\\/E'),
-      bookValue: getVal('Book Value'),
-      dividendYield: getVal('Dividend Yield'),
-      roce: getVal('ROCE'),
-      roe: getVal('ROE'),
-      faceValue: getVal('Face Value'),
-    };
-  } catch (e) {
-    return null;
   }
+  return null;
 }
 
-// Fetch current price from Yahoo Finance v8 chart (reliable even from cloud)
 async function fetchYahooPrice(symbol) {
   try {
     const r = await fetch(
@@ -107,25 +129,18 @@ async function fetchYahooPrice(symbol) {
     if (!r.ok) return null;
     const d = await r.json();
     const meta = d?.chart?.result?.[0]?.meta;
-    if (!meta) return null;
+    if (!meta?.regularMarketPrice) return null;
     return {
       currentPrice: meta.regularMarketPrice,
       high52w: meta.fiftyTwoWeekHigh,
       low52w: meta.fiftyTwoWeekLow,
       longName: meta.longName || meta.shortName,
     };
-  } catch (e) {
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
-// RSS feed helper with timeout
 async function fetchFeed(url) {
-  try {
-    return await parser.parseURL(url);
-  } catch (e) {
-    return null;
-  }
+  try { return await parser.parseURL(url); } catch (e) { return null; }
 }
 
 export default async function handler(req, res) {
@@ -135,24 +150,21 @@ export default async function handler(req, res) {
   const ticker = symbol.split('.')[0].toUpperCase();
   const rawName = name ? decodeURIComponent(name).split('(')[0].trim() : ticker;
 
-  // Run Screener + Yahoo price in parallel (don't wait for one before the other)
   const [screenerData, yahooPrice] = await Promise.all([
     scrapeScreener(ticker),
     fetchYahooPrice(symbol),
   ]);
 
-  // Merge: Screener is primary for fundamentals, Yahoo v8 for live price
   const companyFullName = screenerData?.companyName || yahooPrice?.longName || rawName;
   const currentPrice = yahooPrice?.currentPrice || screenerData?.currentPrice;
   const high52w = yahooPrice?.high52w || screenerData?.high52w;
   const low52w = yahooPrice?.low52w || screenerData?.low52w;
 
-  // Return a clean, flat profile object that Portfolio.jsx will read
   const profile = {
     currentPrice,
     high52w,
     low52w,
-    marketCap: screenerData?.marketCap,    // In Cr (Screener shows in Cr)
+    marketCap: screenerData?.marketCap,
     pe: screenerData?.pe,
     bookValue: screenerData?.bookValue,
     dividendYield: screenerData?.dividendYield,
@@ -160,20 +172,15 @@ export default async function handler(req, res) {
     roe: screenerData?.roe,
     faceValue: screenerData?.faceValue,
     companyName: companyFullName,
-    dataSource: screenerData ? 'Screener.in' : yahooPrice ? 'Yahoo Finance' : null,
+    dataSource: screenerData && (screenerData.marketCap || screenerData.pe) ? 'Screener.in' : yahooPrice ? 'Yahoo Finance' : null,
   };
 
-  // Fetch news from 3 Indian financial sources in parallel
-  const searchTerm = companyFullName.length > 3 ? companyFullName.split(' ').slice(0, 3).join(' ') : rawName;
-  const tickerQuery = encodeURIComponent(`"${searchTerm}" NSE stock`);
-  const earningsQuery = encodeURIComponent(`"${searchTerm}" results quarterly earnings`);
-  const etQuery = encodeURIComponent(`"${searchTerm}" stock`);
-
-  const [googleFeed, etFeed, mcFeed, earningsFeed] = await Promise.all([
-    fetchFeed(`https://news.google.com/rss/search?q=${tickerQuery}&hl=en-IN&gl=IN&ceid=IN:en`),
-    fetchFeed(`https://economictimes.indiatimes.com/rsssearchresult.cms?query=${etQuery}`),
-    fetchFeed(`https://www.moneycontrol.com/rss/results.xml?q=${encodeURIComponent(searchTerm)}`),
-    fetchFeed(`https://news.google.com/rss/search?q=${earningsQuery}&hl=en-IN&gl=IN&ceid=IN:en`),
+  // Fetch news from 3 Indian sources in parallel
+  const searchName = companyFullName.split(' ').slice(0, 3).join(' ');
+  const [googleFeed, earningsFeed, etFeed] = await Promise.all([
+    fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(`"${searchName}" NSE stock`)}&hl=en-IN&gl=IN&ceid=IN:en`),
+    fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(`"${searchName}" results earnings quarterly`)}&hl=en-IN&gl=IN&ceid=IN:en`),
+    fetchFeed(`https://economictimes.indiatimes.com/rsssearchresult.cms?query=${encodeURIComponent(searchName)}`),
   ]);
 
   const seen = new Set();
@@ -181,39 +188,25 @@ export default async function handler(req, res) {
 
   const processItems = (items = [], sourceName) => {
     items.slice(0, 4).forEach(item => {
-      const title = (() => {
-        let t = item.title || '';
-        if (t.includes(' - ')) {
-          const parts = t.split(' - ');
-          const maybePublisher = parts[parts.length - 1];
-          if (maybePublisher.length < 50) { t = parts.slice(0, -1).join(' - '); }
-        }
-        return t.trim();
-      })();
-
+      let title = item.title || '';
+      let publisher = sourceName;
+      if (title.includes(' - ')) {
+        const parts = title.split(' - ');
+        const last = parts[parts.length - 1];
+        if (last.length < 50) { publisher = parts.pop(); title = parts.join(' - '); }
+      }
+      title = title.trim();
       if (!title || seen.has(title.slice(0, 40))) return;
       seen.add(title.slice(0, 40));
-
       const fullText = title + ' ' + (item.contentSnippet || item.summary || '');
       const score = deepScore(fullText);
       const grade = score > 1 ? 'Positive' : score < -1 ? 'Negative' : 'Neutral';
-
-      let publisher = sourceName;
-      if (item.title?.includes(' - ')) {
-        const parts = item.title.split(' - ');
-        if (parts[parts.length - 1].length < 50) publisher = parts.pop();
-      }
-
       news.push({
-        title,
-        link: item.link || item.guid,
-        publisher,
+        title, link: item.link || item.guid, publisher,
         providerPublishTime: item.isoDate || item.pubDate,
-        sentimentGrade: grade,
-        deepSentimentGrade: grade,
-        contentSnippet: item.contentSnippet || item.summary || 'Read the full article for detailed analysis.',
-        baseScore: score,
-        deepScore: score,
+        sentimentGrade: grade, deepSentimentGrade: grade,
+        contentSnippet: item.contentSnippet || item.summary || 'Read the full article.',
+        baseScore: score, deepScore: score,
       });
     });
   };
@@ -221,7 +214,6 @@ export default async function handler(req, res) {
   processItems(googleFeed?.items, 'Google News');
   processItems(earningsFeed?.items, 'Earnings News');
   processItems(etFeed?.items, 'Economic Times');
-  processItems(mcFeed?.items, 'Moneycontrol');
 
   res.status(200).json({ profile, news: news.slice(0, 8) });
 }

@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { ArrowUpRight, Radar, Radio, Zap, BarChart2, ShieldCheck, FileUp, ArrowRight, TrendingUp, Activity, Lock, Newspaper, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowUpRight, Radar, Radio, Zap, BarChart2, ShieldCheck, FileUp, ArrowRight, TrendingUp, Activity, Lock, Newspaper, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 
 const MARKET_PULSE = [
   { label: 'NIFTY 50', value: '24,315.85', change: '+0.68%', up: true },
@@ -13,123 +12,41 @@ const MARKET_PULSE = [
 ];
 
 const FEATURES = [
-  {
-    icon: ShieldCheck,
-    color: '#2dd4bf',
-    title: 'Full Scrutiny AI',
-    desc: 'Our Quad-Layer Screener engine auto-classifies every stock into 58 SEBI sectors with 12-second deep research.',
-  },
-  {
-    icon: BarChart2,
-    color: '#0ea5e9',
-    title: 'Sector Drill-Down',
-    desc: 'Click any slice on the interactive donut chart to instantly filter your holdings by sector.',
-  },
-  {
-    icon: Radio,
-    color: '#8b5cf6',
-    title: 'Oracle Forecast',
-    desc: 'AI-driven 6-month growth projection using real-time geopolitical news + NIFTY indexing bounds.',
-  },
+  { icon: ShieldCheck, color: '#2dd4bf', title: 'Full Scrutiny AI', desc: 'Our Quad-Layer Screener engine auto-classifies every stock into 58 SEBI sectors with 12-second deep research.' },
+  { icon: BarChart2, color: '#0ea5e9', title: 'Sector Drill-Down', desc: 'Click any slice on the interactive donut chart to instantly filter your holdings by sector.' },
+  { icon: Radio, color: '#8b5cf6', title: 'Oracle Forecast', desc: 'AI-driven 6-month growth projection using real-time geopolitical news + NIFTY indexing bounds.' },
 ];
 
 const STEPS = [
-  { num: '01', icon: FileUp, title: 'Import Your Portfolio', desc: 'Go to Smart Import → Upload your broker\'s Holdings CSV (Zerodha, Upstox, Groww supported).' },
+  { num: '01', icon: FileUp, title: 'Import Your Portfolio', desc: "Go to Smart Import → Upload your broker's Holdings CSV (Zerodha, Upstox, Groww supported)." },
   { num: '02', icon: Zap, title: 'Run Live Intelligence Sync', desc: 'Click "Live Quotes" in Portfolio → AI auto-classifies sectors and fetches live market prices.' },
   { num: '03', icon: TrendingUp, title: 'Explore Your Dashboard', desc: 'Return here to see your Oracle forecast, sentiment weather, and portfolio health score.' },
 ];
 
-export default function Dashboard({ session }) {
+// Dashboard is now a pure rendering component — all data fetching lives in App.jsx
+export default function Dashboard({ session, data, loading, onRefresh }) {
   const navigate = useNavigate();
-  const [assets, setAssets] = useState([]);
-  const [netWorth, setNetWorth] = useState(0);
-  const [weather, setWeather] = useState({ percent: 50, articleCount: 0 });
-  const [intelligenceData, setIntelligenceData] = useState(null); // Premium deep breakdown
   const [expandedStock, setExpandedStock] = useState(null);
-  const [oracleData, setOracleData] = useState(null);
-  const [projectionTimeline, setProjectionTimeline] = useState([]);
-  const [oracleSyncing, setOracleSyncing] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   const email = session?.user?.email || '';
   const isAdmin = email.toLowerCase() === 'surajsan1998@gmail.com';
   const firstName = isAdmin ? 'Suraj' : email.split('@')[0];
 
-  useEffect(() => { fetchDashboardData(); }, []);
-
-  async function fetchDashboardData() {
-    const { data: assetData } = await supabase.from('assets').select('*').eq('user_id', session.user.id);
-    if (assetData && assetData.length > 0) {
-      const total = assetData.reduce((acc, curr) => acc + Number(curr.value), 0);
-      setNetWorth(total);
-      setAssets(assetData);
-
-      const sorted = [...assetData].sort((a, b) => Number(b.value) - Number(a.value));
-
-      // Premium: Top 10 deep analysis for admin. Standard: Top 4 for free users.
-      const top10Names = sorted.slice(0, 10).map(a => encodeURIComponent(a.name.split('(')[0].trim())).join(',');
-      const top4Names = sorted.slice(0, 4).map(a => encodeURIComponent(a.name.split('(')[0].trim())).join(',');
-
-      if (isAdmin) {
-        // Deep mode — full top-10 breakdown with per-stock headlines
-        try {
-          const res = await fetch(`/api/portfolio-sentiment?names=${top10Names}&deep=true`);
-          const s = await res.json();
-          if (s && typeof s.percent === 'number') {
-            setWeather({ percent: s.percent, articleCount: s.articleCount });
-            if (s.breakdown) setIntelligenceData(s.breakdown);
-          }
-        } catch (e) {}
-      } else {
-        // Standard mode — top 4 overview only
-        try {
-          const res = await fetch(`/api/portfolio-sentiment?names=${top4Names}`);
-          const s = await res.json();
-          if (s && typeof s.percent === 'number') setWeather(s);
-        } catch (e) {}
-      }
-
-      try {
-        setOracleSyncing(true);
-        const oRes = await fetch(`/api/oracle?names=${encodeURIComponent(sorted.slice(0, 5).map(a => a.name.split('(')[0].trim()).join(','))}`);
-        const pred = await oRes.json();
-        setOracleData(pred);
-        // Always build chart — baseline 4% renders even when sentiment is neutral
-        const months = ['Today', 'M+1', 'M+2', 'M+3', 'M+4', 'M+5', 'M+6'];
-        let cur = total;
-        const mg = (pred.growthPercent || 4.0) / 6;
-        setProjectionTimeline(months.map(m => {
-          const point = { month: m, 'Projected Value': Math.round(cur) };
-          cur = cur * (1 + mg / 100);
-          return point;
-        }));
-      } catch (e) {
-        // Fallback: always render baseline 4% chart if oracle fails
-        const months = ['Today', 'M+1', 'M+2', 'M+3', 'M+4', 'M+5', 'M+6'];
-        let cur = total;
-        setOracleData({ growthPercent: 4.0 });
-        setProjectionTimeline(months.map(m => {
-          const point = { month: m, 'Projected Value': Math.round(cur) };
-          cur = cur * (1 + (4.0 / 6) / 100);
-          return point;
-        }));
-      }
-      setOracleSyncing(false);
-    }
-    setLoading(false);
-  }
-
-  if (loading) {
+  // ── Loading state — only on first load ──
+  if (loading || data === null) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh', flexDirection: 'column', gap: '16px' }}>
         <Activity size={32} style={{ color: 'var(--accent-primary)', animation: 'spin 1s linear infinite' }} />
         <p className="text-muted" style={{ letterSpacing: '2px', textTransform: 'uppercase', fontSize: '12px' }}>Initializing Terminal...</p>
+        <p className="text-muted" style={{ fontSize: '11px', opacity: 0.5 }}>This only happens once per session</p>
       </div>
     );
   }
 
+  const { assets = [], netWorth = 0, weather = { percent: 50, articleCount: 0 }, oracleData, projectionTimeline = [], intelligenceData } = data;
   const hasAssets = assets.length > 0;
   const sentimentColor = weather.percent > 65 ? '#2dd4bf' : weather.percent < 45 ? '#ef4444' : '#eab308';
+
   const totalBuyValue = assets.reduce((acc, a) => acc + (a.buy_price ? Number(a.buy_price) : 0), 0);
   const pnl = totalBuyValue > 0 ? netWorth - totalBuyValue : null;
 
@@ -138,20 +55,16 @@ export default function Dashboard({ session }) {
     { name: 'Empty', value: 100 - weather.percent, fill: 'rgba(255,255,255,0.04)' },
   ];
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening';
+
   return (
     <div className="animate-in" style={{ maxWidth: '1400px' }}>
 
       {/* ── Market Pulse Ticker ── */}
-      <div style={{
-        display: 'flex', gap: '0', overflowX: 'auto', marginBottom: '28px',
-        background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
-        borderRadius: '12px', padding: '0', scrollbarWidth: 'none',
-      }}>
+      <div style={{ display: 'flex', overflowX: 'auto', marginBottom: '28px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', scrollbarWidth: 'none' }}>
         {MARKET_PULSE.map((m, i) => (
-          <div key={i} style={{
-            padding: '12px 24px', borderRight: i < MARKET_PULSE.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none',
-            whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
+          <div key={i} style={{ padding: '12px 24px', borderRight: i < MARKET_PULSE.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>
             <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', letterSpacing: '1px', textTransform: 'uppercase', margin: '0 0 3px' }}>{m.label}</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>{m.value}</span>
@@ -162,59 +75,37 @@ export default function Dashboard({ session }) {
       </div>
 
       {/* ── Header ── */}
-      <div style={{ marginBottom: '32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-          <h1 style={{ fontSize: '32px', margin: 0 }}>
-            Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'},{' '}
-            <span className="text-gradient">{firstName}</span>
-          </h1>
-          {isAdmin && (
-            <span style={{ fontSize: '11px', background: 'var(--accent-gradient)', color: '#041014', padding: '3px 10px', borderRadius: '20px', fontWeight: 700, letterSpacing: '0.5px' }}>
-              👑 Admin
-            </span>
-          )}
+      <div style={{ marginBottom: '32px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+            <h1 style={{ fontSize: '32px', margin: 0 }}>
+              Good {greeting}, <span className="text-gradient">{firstName}</span>
+            </h1>
+            {isAdmin && <span style={{ fontSize: '11px', background: 'var(--accent-gradient)', color: '#041014', padding: '3px 10px', borderRadius: '20px', fontWeight: 700 }}>👑 Admin</span>}
+          </div>
+          <p className="text-muted" style={{ fontSize: '14px' }}>
+            {hasAssets
+              ? `Your portfolio intelligence is live. ${assets.length} assets tracked across ${[...new Set(assets.map(a => a.sector).filter(Boolean))].length} sectors.`
+              : 'Welcome to your financial intelligence terminal. Follow the setup guide to get started.'}
+          </p>
         </div>
-        <p className="text-muted" style={{ fontSize: '14px' }}>
-          {hasAssets
-            ? `Your portfolio intelligence is live. ${assets.length} assets tracked across ${[...new Set(assets.map(a => a.sector).filter(Boolean))].length} sectors.`
-            : 'Welcome to your financial intelligence terminal. Follow the setup guide to get started.'}
-        </p>
+        <button
+          onClick={onRefresh}
+          title="Refresh Dashboard Data"
+          style={{ background: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)', color: 'var(--accent-primary)', padding: '8px 12px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', flexShrink: 0 }}>
+          <RefreshCw size={14} /> Refresh
+        </button>
       </div>
 
       {hasAssets ? (
-        // ── ACTIVE STATE ──
         <>
           {/* KPI Row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '28px' }}>
             {[
-              {
-                label: 'Total Portfolio Value',
-                value: `₹${netWorth.toLocaleString('en-IN')}`,
-                sub: 'Active Wealth Exposure',
-                color: '#2dd4bf',
-                icon: TrendingUp,
-              },
-              {
-                label: 'Total Assets',
-                value: assets.length,
-                sub: 'Holdings in Vault',
-                color: '#0ea5e9',
-                icon: BarChart2,
-              },
-              {
-                label: 'Sector Coverage',
-                value: [...new Set(assets.map(a => a.sector).filter(Boolean))].length,
-                sub: 'Unique SEBI Sectors',
-                color: '#8b5cf6',
-                icon: Radar,
-              },
-              ...(pnl !== null ? [{
-                label: 'Unrealised P&L',
-                value: `${pnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(pnl)).toLocaleString('en-IN')}`,
-                sub: pnl >= 0 ? 'Net Gain' : 'Net Loss',
-                color: pnl >= 0 ? '#10b981' : '#ef4444',
-                icon: ArrowUpRight,
-              }] : []),
+              { label: 'Total Portfolio Value', value: `₹${netWorth.toLocaleString('en-IN')}`, sub: 'Active Wealth Exposure', color: '#2dd4bf', icon: TrendingUp },
+              { label: 'Total Assets', value: assets.length, sub: 'Holdings in Vault', color: '#0ea5e9', icon: BarChart2 },
+              { label: 'Sector Coverage', value: [...new Set(assets.map(a => a.sector).filter(Boolean))].length, sub: 'Unique SEBI Sectors', color: '#8b5cf6', icon: Radar },
+              ...(pnl !== null ? [{ label: 'Unrealised P&L', value: `${pnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(pnl)).toLocaleString('en-IN')}`, sub: pnl >= 0 ? 'Net Gain' : 'Net Loss', color: pnl >= 0 ? '#10b981' : '#ef4444', icon: ArrowUpRight }] : []),
             ].map((kpi, i) => (
               <div key={i} className="glass-panel" style={{ padding: '20px', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: -20, right: -20, width: '80px', height: '80px', borderRadius: '50%', background: kpi.color, opacity: 0.06 }} />
@@ -225,9 +116,9 @@ export default function Dashboard({ session }) {
             ))}
           </div>
 
-          {/* Sentiment + Oracle Grid */}
+          {/* Sentiment + Oracle */}
           <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', marginBottom: '28px' }}>
-            {/* Sentiment Gauge */}
+            {/* Gauge */}
             <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 20px' }}>
               <p className="text-muted" style={{ fontSize: '11px', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Radar size={14} color={sentimentColor} /> Market Sentiment
@@ -235,8 +126,7 @@ export default function Dashboard({ session }) {
               <div style={{ position: 'relative', width: '200px', height: '110px' }}>
                 <ResponsiveContainer>
                   <PieChart>
-                    <Pie data={gaugeData} cx="50%" cy="100%" startAngle={180} endAngle={0}
-                      innerRadius={70} outerRadius={88} dataKey="value" stroke="none" cornerRadius={8}>
+                    <Pie data={gaugeData} cx="50%" cy="100%" startAngle={180} endAngle={0} innerRadius={70} outerRadius={88} dataKey="value" stroke="none" cornerRadius={8}>
                       {gaugeData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                     </Pie>
                   </PieChart>
@@ -257,12 +147,10 @@ export default function Dashboard({ session }) {
             <div className="glass-panel" style={{ padding: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
                 <div>
-                  <h3 style={{ margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Radio size={18} className="text-secondary" /> Oracle Forecast
-                  </h3>
+                  <h3 style={{ margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '8px' }}><Radio size={18} className="text-secondary" /> Oracle Forecast</h3>
                   <p className="text-muted" style={{ fontSize: '12px', margin: 0 }}>6-Month AI-Projected Growth Trajectory</p>
                 </div>
-                {oracleData && !oracleSyncing && (
+                {oracleData && (
                   <div style={{ textAlign: 'right', background: 'rgba(0,0,0,0.25)', padding: '10px 16px', borderRadius: '10px', border: `1px solid ${oracleData.growthPercent >= 0 ? 'rgba(45,212,191,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
                     <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', margin: '0 0 3px', letterSpacing: '1px', textTransform: 'uppercase' }}>Alpha Projection</p>
                     <h2 style={{ fontSize: '24px', margin: 0, color: oracleData.growthPercent >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>
@@ -272,11 +160,7 @@ export default function Dashboard({ session }) {
                 )}
               </div>
               <div style={{ height: '220px' }}>
-                {oracleSyncing ? (
-                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--accent-primary)', letterSpacing: '2px', textTransform: 'uppercase', fontSize: '12px' }}>📡 Processing Vector Weights...</p>
-                  </div>
-                ) : projectionTimeline.length > 0 ? (
+                {projectionTimeline.length > 0 ? (
                   <ResponsiveContainer>
                     <LineChart data={projectionTimeline}>
                       <defs>
@@ -294,49 +178,34 @@ export default function Dashboard({ session }) {
                         itemStyle={{ color: '#2dd4bf' }}
                         labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
                       />
-                      <Line type="monotone" dataKey="Projected Value" stroke="url(#lineGrad)"
-                        strokeWidth={2.5} strokeDasharray="6 3"
+                      <Line type="monotone" dataKey="Projected Value" stroke="url(#lineGrad)" strokeWidth={2.5} strokeDasharray="6 3"
                         dot={{ fill: '#041014', stroke: '#2dd4bf', strokeWidth: 2, r: 4 }}
                         activeDot={{ r: 7, fill: '#2dd4bf' }} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <p className="text-muted" style={{ textAlign: 'center', marginTop: '80px' }}>No data yet.</p>
+                  <p className="text-muted" style={{ textAlign: 'center', marginTop: '80px' }}>Processing oracle data...</p>
                 )}
               </div>
             </div>
           </div>
 
-          {/* ── Premium Intelligence Panel ── */}
+          {/* Premium Intelligence Panel */}
           <div style={{ position: 'relative', marginBottom: '28px' }}>
             {!isAdmin && (
-              // Premium Gate Overlay
-              <div style={{
-                position: 'absolute', inset: 0, zIndex: 10,
-                background: 'rgba(4, 16, 20, 0.75)',
-                backdropFilter: 'blur(8px)',
-                borderRadius: '16px',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px',
-                border: '1px solid rgba(45,212,191,0.2)',
-              }}>
+              <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(4,16,20,0.75)', backdropFilter: 'blur(8px)', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', border: '1px solid rgba(45,212,191,0.2)' }}>
                 <Lock size={32} style={{ color: 'var(--accent-primary)' }} />
                 <h3 style={{ margin: 0, fontSize: '18px' }}>Premium Intelligence</h3>
-                <p className="text-muted" style={{ fontSize: '13px', margin: 0, textAlign: 'center', maxWidth: '280px' }}>
-                  Deep Sentiment Analysis of your top 10 holdings is a Premium feature.
-                </p>
-                <button className="btn btn-primary" style={{ padding: '9px 22px', fontSize: '13px', marginTop: '4px' }}>
-                  Upgrade to Premium
-                </button>
+                <p className="text-muted" style={{ fontSize: '13px', margin: 0, textAlign: 'center', maxWidth: '280px' }}>Deep Sentiment Analysis of your top 10 holdings is a Premium feature.</p>
+                <button className="btn btn-primary" style={{ padding: '9px 22px', fontSize: '13px', marginTop: '4px' }}>Upgrade to Premium</button>
               </div>
             )}
-
             <div className="glass-panel" style={{ padding: '24px', filter: isAdmin ? 'none' : 'blur(2px)', pointerEvents: isAdmin ? 'auto' : 'none', minHeight: '200px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
                 <Newspaper size={18} style={{ color: 'var(--accent-primary)' }} />
                 <h3 style={{ margin: 0, fontSize: '16px' }}>Deep Intelligence: Top 10 Holdings</h3>
                 <span style={{ marginLeft: 'auto', fontSize: '11px', background: 'var(--accent-gradient)', color: '#041014', padding: '2px 10px', borderRadius: '20px', fontWeight: 700 }}>PREMIUM</span>
               </div>
-
               {intelligenceData && intelligenceData.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {intelligenceData.map((stock, i) => {
@@ -344,14 +213,10 @@ export default function Dashboard({ session }) {
                     const isExpanded = expandedStock === stock.name;
                     return (
                       <div key={i} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '10px', overflow: 'hidden', border: `1px solid ${sc}22` }}>
-                        <div
-                          onClick={() => setExpandedStock(isExpanded ? null : stock.name)}
-                          style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', cursor: 'pointer' }}
-                        >
+                        <div onClick={() => setExpandedStock(isExpanded ? null : stock.name)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', cursor: 'pointer' }}>
                           <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', width: '20px', flexShrink: 0 }}>#{i + 1}</span>
                           <span style={{ fontWeight: 600, fontSize: '14px', flex: 1 }}>{stock.name}</span>
                           <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{stock.articleCount} articles</span>
-                          {/* Mini bar */}
                           <div style={{ width: '80px', height: '6px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', flexShrink: 0 }}>
                             <div style={{ width: `${stock.percent}%`, height: '100%', background: sc, borderRadius: '4px', transition: 'width 0.6s ease' }} />
                           </div>
@@ -359,7 +224,6 @@ export default function Dashboard({ session }) {
                           <span style={{ fontSize: '11px', background: `${sc}22`, color: sc, padding: '2px 8px', borderRadius: '12px', fontWeight: 600, width: '58px', textAlign: 'center', flexShrink: 0 }}>{stock.sentiment}</span>
                           {isExpanded ? <ChevronUp size={14} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} /> : <ChevronDown size={14} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />}
                         </div>
-
                         {isExpanded && stock.headlines && stock.headlines.length > 0 && (
                           <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '12px 16px 12px 48px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             {stock.headlines.map((h, j) => (
@@ -381,16 +245,15 @@ export default function Dashboard({ session }) {
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>
-                  {isAdmin ? 'Loading intelligence data...' : 'Premium analysis locked.'}
+                  {isAdmin ? 'Intelligence data loading on next refresh...' : 'Premium analysis locked.'}
                 </div>
               )}
             </div>
           </div>
         </>
       ) : (
-        // ── EMPTY STATE: ONBOARDING ──
+        // ── EMPTY STATE ──
         <>
-          {/* Feature Marketing Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '36px' }}>
             {FEATURES.map((f, i) => (
               <div key={i} className="glass-panel" style={{ padding: '28px', position: 'relative', overflow: 'hidden', border: `1px solid ${f.color}22` }}>
@@ -403,8 +266,6 @@ export default function Dashboard({ session }) {
               </div>
             ))}
           </div>
-
-          {/* Setup Guide */}
           <div className="glass-panel" style={{ padding: '32px', marginBottom: '28px', background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
             <h2 style={{ fontSize: '22px', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Zap size={22} style={{ color: 'var(--accent-primary)' }} /> Unlock Your Intelligence in 3 Steps
@@ -413,26 +274,15 @@ export default function Dashboard({ session }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
               {STEPS.map((step, i) => (
                 <div key={i} style={{ display: 'flex', gap: '16px' }}>
-                  <div style={{
-                    flexShrink: 0, width: '42px', height: '42px', borderRadius: '50%',
-                    background: 'rgba(45,212,191,0.12)', border: '1px solid rgba(45,212,191,0.25)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '13px', fontWeight: 700, color: 'var(--accent-primary)',
-                  }}>{step.num}</div>
+                  <div style={{ flexShrink: 0, width: '42px', height: '42px', borderRadius: '50%', background: 'rgba(45,212,191,0.12)', border: '1px solid rgba(45,212,191,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--accent-primary)' }}>{step.num}</div>
                   <div>
-                    <h4 style={{ fontSize: '14px', margin: '0 0 5px', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <step.icon size={14} style={{ color: 'var(--accent-primary)' }} /> {step.title}
-                    </h4>
+                    <h4 style={{ fontSize: '14px', margin: '0 0 5px', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}><step.icon size={14} style={{ color: 'var(--accent-primary)' }} /> {step.title}</h4>
                     <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', margin: 0, lineHeight: 1.6 }}>{step.desc}</p>
                   </div>
                 </div>
               ))}
             </div>
-            <button
-              className="btn btn-primary"
-              style={{ marginTop: '28px', padding: '12px 28px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
-              onClick={() => navigate('/import')}
-            >
+            <button className="btn btn-primary" style={{ marginTop: '28px', padding: '12px 28px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => navigate('/import')}>
               Start with Smart Import <ArrowRight size={16} />
             </button>
           </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -8,41 +8,117 @@ import Importer from './components/Importer';
 import Auth from './components/Auth';
 import AdminConsole from './components/AdminConsole';
 import { supabase } from './supabaseClient';
-import './App.css'; // Keeps standard import structure
+import './App.css';
 
+// ── Dashboard data cache lives here so navigation never re-fetches ──
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(window.innerWidth < 1024);
 
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 1024 && !isSidebarCollapsed) {
-        setIsSidebarCollapsed(true);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [isSidebarCollapsed]);
+  // Dashboard data — fetched once after login, never reset on navigation
+  const [dashboardData, setDashboardData] = useState(null);   // null = not yet fetched
+  const [dashboardLoading, setDashboardLoading] = useState(false);
 
+  // ── Auth ──
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (!session) setDashboardData(null); // Clear cache on sign-out
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
-  if (loading) return null;
+  // ── Responsive sidebar collapse ──
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024 && !isSidebarCollapsed) setIsSidebarCollapsed(true);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isSidebarCollapsed]);
 
-  if (!session) {
-     return <Auth />;
-  }
+  // ── Dashboard data fetch — only runs once per session ──
+  const fetchDashboardData = useCallback(async (sess) => {
+    if (!sess) return;
+    setDashboardLoading(true);
+    const isAdmin = sess.user.email.toLowerCase() === 'surajsan1998@gmail.com';
+
+    const { data: assetData } = await supabase.from('assets').select('*').eq('user_id', sess.user.id);
+
+    if (!assetData || assetData.length === 0) {
+      setDashboardData({ assets: [], netWorth: 0, weather: { percent: 50, articleCount: 0 }, oracleData: null, projectionTimeline: [], intelligenceData: null });
+      setDashboardLoading(false);
+      return;
+    }
+
+    const total = assetData.reduce((acc, curr) => acc + Number(curr.value), 0);
+    const sorted = [...assetData].sort((a, b) => Number(b.value) - Number(a.value));
+
+    // Build name list for API calls
+    const top10Names = sorted.slice(0, 10).map(a => encodeURIComponent(a.name.split('(')[0].trim())).join(',');
+    const top4Names = sorted.slice(0, 4).map(a => encodeURIComponent(a.name.split('(')[0].trim())).join(',');
+    const oracleNames = encodeURIComponent(sorted.slice(0, 5).map(a => a.name.split('(')[0].trim()).join(','));
+
+    // Start all heavy API calls in parallel
+    const [sentimentRes, oracleRes] = await Promise.allSettled([
+      fetch(`/api/portfolio-sentiment?names=${isAdmin ? top10Names : top4Names}${isAdmin ? '&deep=true' : ''}`),
+      fetch(`/api/oracle?names=${oracleNames}`),
+    ]);
+
+    let weather = { percent: 50, articleCount: 0 };
+    let intelligenceData = null;
+    let oracleData = null;
+    let projectionTimeline = [];
+
+    if (sentimentRes.status === 'fulfilled' && sentimentRes.value.ok) {
+      const s = await sentimentRes.value.json();
+      if (typeof s.percent === 'number') {
+        weather = { percent: s.percent, articleCount: s.articleCount || 0 };
+        if (isAdmin && s.breakdown) intelligenceData = s.breakdown;
+      }
+    }
+
+    if (oracleRes.status === 'fulfilled' && oracleRes.value.ok) {
+      const pred = await oracleRes.value.json();
+      oracleData = pred;
+      const months = ['Today', 'M+1', 'M+2', 'M+3', 'M+4', 'M+5', 'M+6'];
+      let cur = total;
+      const mg = (pred.growthPercent || 4.0) / 6;
+      projectionTimeline = months.map(m => {
+        const point = { month: m, 'Projected Value': Math.round(cur) };
+        cur = cur * (1 + mg / 100);
+        return point;
+      });
+    } else {
+      // Always render baseline 4% chart even when oracle fails
+      oracleData = { growthPercent: 4.0 };
+      const months = ['Today', 'M+1', 'M+2', 'M+3', 'M+4', 'M+5', 'M+6'];
+      let cur = total;
+      projectionTimeline = months.map(m => {
+        const point = { month: m, 'Projected Value': Math.round(cur) };
+        cur = cur * (1 + (4.0 / 6) / 100);
+        return point;
+      });
+    }
+
+    setDashboardData({ assets: assetData, netWorth: total, weather, oracleData, projectionTimeline, intelligenceData });
+    setDashboardLoading(false);
+  }, []);
+
+  // Trigger fetch when session is established (once)
+  useEffect(() => {
+    if (session && dashboardData === null && !dashboardLoading) {
+      fetchDashboardData(session);
+    }
+  }, [session, dashboardData, dashboardLoading, fetchDashboardData]);
+
+  if (loading) return null;
+  if (!session) return <Auth />;
 
   const sidebarWidth = isSidebarCollapsed ? '80px' : '250px';
 
@@ -53,10 +129,17 @@ function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard session={session} />} />
-            <Route path="/portfolio" element={<Portfolio session={session} />} />
+            <Route path="/dashboard" element={
+              <Dashboard
+                session={session}
+                data={dashboardData}
+                loading={dashboardLoading}
+                onRefresh={() => { setDashboardData(null); }}
+              />
+            } />
+            <Route path="/portfolio" element={<Portfolio session={session} onPortfolioChange={() => setDashboardData(null)} />} />
             <Route path="/settings" element={<Settings session={session} />} />
-            <Route path="/import" element={<Importer session={session} />} />
+            <Route path="/import" element={<Importer session={session} onImportComplete={() => setDashboardData(null)} />} />
             <Route path="/admin" element={<AdminConsole session={session} />} />
           </Routes>
         </main>
