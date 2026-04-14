@@ -94,7 +94,7 @@ export default function Importer({ session, onImportComplete }) {
       return;
     }
 
-    const stockKeywords = ['instrument', 'stock name', 'quantity', 'qty', 'avg', 'closing', 'current value', 'invested', 'buy value', 'isin', 'symbol', 'security', 'scrip'];
+    const stockKeywords = ['instrument', 'stock name', 'quantity', 'qty', 'avg', 'closing', 'current value', 'invested', 'buy value', 'isin', 'symbol', 'security', 'scrip', 'ltp', 'mkt val'];
     let headerRowIdx = -1;
     let activeBroker = importBroker;
 
@@ -117,8 +117,8 @@ export default function Importer({ session, onImportComplete }) {
     }
 
     if (headerRowIdx === -1) {
+      setData([]);
       setStatus('error');
-      // DON'T set status to idle here, let the error persist
       return;
     }
 
@@ -134,8 +134,9 @@ export default function Importer({ session, onImportComplete }) {
     if (parsedAssets.length > 0) {
       setCsvType('stocks');
       setData(parsedAssets);
-      setStatus('idle'); // Clear the 'parsing' spinner but allow the preview to show
+      setStatus('idle'); 
     } else {
+      setData([]);
       setStatus('error');
     }
   };
@@ -144,6 +145,8 @@ export default function Importer({ session, onImportComplete }) {
     const file = e.target.files[0];
     if (!file) return;
 
+    // Reset UI state for fresh upload
+    setData([]);
     setStatus('parsing');
     setCsvType('none');
 
@@ -210,6 +213,8 @@ export default function Importer({ session, onImportComplete }) {
       if (onImportComplete) onImportComplete();
     }
   };
+
+  const isSyncDisabled = status === 'uploading' || status === 'parsing' || data.length === 0;
 
   return (
     <div className="animate-in">
@@ -283,11 +288,12 @@ export default function Importer({ session, onImportComplete }) {
               </div>
 
               <button 
-                className="btn btn-primary" 
+                className={`btn btn-primary ${isSyncDisabled ? 'opacity-50 pointer-events-none' : ''}`} 
                 onClick={handleSyncToSupabase}
+                disabled={isSyncDisabled}
                 style={{ padding: '8px 16px', fontSize: '14px' }}
               >
-                Sync to My Portfolio
+                {status === 'uploading' ? 'Syncing...' : 'Sync to My Portfolio'}
               </button>
             </div>
             
@@ -339,7 +345,7 @@ export default function Importer({ session, onImportComplete }) {
           </div>
         )}
         
-        {status === 'error' && (
+        {status === 'error' && data.length === 0 && (
           <div style={{ marginTop: '20px', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'rgba(239,68,68,0.1)', padding: '16px', borderRadius: '12px' }}>
             <AlertCircle size={20} /> Unrecognized format. Please ensure headers like "Instrument" or "Stock Name" are present.
           </div>
