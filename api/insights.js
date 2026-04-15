@@ -112,11 +112,14 @@ export default async function handler(req, res) {
     dataSource: fundamentals ? 'Yahoo Finance' : priceData ? 'Yahoo Finance (price only)' : null,
   };
 
-  // Fetch news from 3 sources in parallel using full company name
-  const searchName = companyFullName.split(' ').slice(0, 3).join(' ');
+  // Fetch news from 3 sources in parallel
+  // Broader search for private/unlisted companies (names without .NS or .BO)
+  const isListed = symbol.endsWith('.NS') || symbol.endsWith('.BO');
+  const querySuffix = isListed ? ' stock' : '';
+  
   const [googleFeed, earningsFeed, etFeed] = await Promise.all([
-    fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(`"${searchName}" NSE stock`)}&hl=en-IN&gl=IN&ceid=IN:en`),
-    fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(`"${searchName}" results earnings quarterly`)}&hl=en-IN&gl=IN&ceid=IN:en`),
+    fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(`"${searchName}"${querySuffix}`)}&hl=en-IN&gl=IN&ceid=IN:en`),
+    fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(`"${searchName}" news`)}&hl=en-IN&gl=IN&ceid=IN:en`),
     fetchFeed(`https://economictimes.indiatimes.com/rsssearchresult.cms?query=${encodeURIComponent(searchName)}`),
   ]);
 
@@ -124,7 +127,7 @@ export default async function handler(req, res) {
   const news = [];
 
   const processItems = (items = [], sourceName) => {
-    items.slice(0, 4).forEach(item => {
+    (items || []).slice(0, 10).forEach(item => {
       let title = item.title || '';
       let publisher = sourceName;
       if (title.includes(' - ')) {
@@ -150,8 +153,11 @@ export default async function handler(req, res) {
   };
 
   processItems(googleFeed?.items, 'Google News');
-  processItems(earningsFeed?.items, 'Earnings News');
+  processItems(earningsFeed?.items, 'Recent News');
   processItems(etFeed?.items, 'Economic Times');
 
-  res.status(200).json({ profile, news: news.slice(0, 8) });
+  // Sort descending by date
+  const sortedNews = news.sort((a, b) => new Date(b.providerPublishTime) - new Date(a.providerPublishTime));
+
+  res.status(200).json({ profile, news: sortedNews.slice(0, 10) });
 }

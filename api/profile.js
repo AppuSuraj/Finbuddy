@@ -179,11 +179,16 @@ const NSE_SECTOR_DB = {
   MAZDOCK: 'Aerospace & Defense', GARDREACH: 'Aerospace & Defense',
   DATAINFRA: 'Telecom - Services',
   
-  // ── USER REQUESTED ──
+  // ── USER REQUESTED & FALLBACKS ──
   SONATSOFTW: 'IT - Software',
+  SONATA: 'IT - Software',
   TCI: 'Transport Services',
   SHYAMMETL: 'Ferrous Metals',
   JSWENERGY: 'Power',
+  LENSKART: 'Retailing',
+  NIFTYBEES: 'Index Funds / ETFs',
+  NIFTY_BEES: 'Index Funds / ETFs',
+  GOLDBEES: 'Commodities',
 };
 
 function localLookupSector(ticker) {
@@ -207,7 +212,7 @@ const ALL_SECTORS = [
   'Other Utilities', 'Paper, Forest & Jute Products', 'Personal Products', 'Petroleum Products',
   'Pharmaceuticals & Biotechnology', 'Power', 'Printing & Publication', 'Realty', 'Retailing',
   'Telecom - Equipment & Accessories', 'Telecom - Services', 'Textiles & Apparels',
-  'Transport Infrastructure', 'Transport Services', 'Uncategorized',
+  'Transport Infrastructure', 'Transport Services', 'Uncategorized', 'Index Funds / ETFs', 'Commodities',
 ];
 
 export default async function handler(req, res) {
@@ -255,7 +260,9 @@ export default async function handler(req, res) {
       if (t.includes('RELIANCE')) sector = 'Petroleum Products';
       if (t.includes('HDFC') || t.includes('SBI')) sector = 'Banks';
       if (t.includes('ZOMATO') || t.includes('NYKAA')) sector = 'Retailing';
+      if (t.includes('LENSKART')) sector = 'Retailing';
       if (t.includes('SONATA') || t.includes('SONATSOFTW')) sector = 'IT - Software';
+      if (t.includes('NIFTY') && t.includes('BEES')) sector = 'Index Funds / ETFs';
       if (t.includes('TCI')) sector = 'Transport Services';
       if (t.includes('SHYAM') || t.includes('METL')) sector = 'Ferrous Metals';
       if (t.includes('JSWENERGY') || t.includes('JSW')) sector = 'Power';
