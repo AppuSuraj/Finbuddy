@@ -817,7 +817,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                  </h3>
 
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                   {insightsData.news && insightsData.news.length > 0 ? insightsData.news.map((item, idx) => {
+                   {insightsData.news && insightsData.news.length > 0 ? [...insightsData.news].sort((a, b) => new Date(b.providerPublishTime) - new Date(a.providerPublishTime)).map((item, idx) => {
                      const isDeepScanned = deepScanStates[idx];
                      const finalGrade = isDeepScanned ? item.deepSentimentGrade : item.sentimentGrade;
                      return (

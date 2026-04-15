@@ -178,6 +178,12 @@ const NSE_SECTOR_DB = {
   RVNL: 'Transport Infrastructure', IRFC: 'Finance', IREDA: 'Finance',
   MAZDOCK: 'Aerospace & Defense', GARDREACH: 'Aerospace & Defense',
   DATAINFRA: 'Telecom - Services',
+  
+  // ── USER REQUESTED ──
+  SONATSOFTW: 'IT - Software',
+  TCI: 'Transport Services',
+  SHYAMMETL: 'Ferrous Metals',
+  JSWENERGY: 'Power',
 };
 
 function localLookupSector(ticker) {
@@ -249,6 +255,10 @@ export default async function handler(req, res) {
       if (t.includes('RELIANCE')) sector = 'Petroleum Products';
       if (t.includes('HDFC') || t.includes('SBI')) sector = 'Banks';
       if (t.includes('ZOMATO') || t.includes('NYKAA')) sector = 'Retailing';
+      if (t.includes('SONATA') || t.includes('SONATSOFTW')) sector = 'IT - Software';
+      if (t.includes('TCI')) sector = 'Transport Services';
+      if (t.includes('SHYAM') || t.includes('METL')) sector = 'Ferrous Metals';
+      if (t.includes('JSWENERGY') || t.includes('JSW')) sector = 'Power';
     }
 
     res.status(200).json({ sector });
