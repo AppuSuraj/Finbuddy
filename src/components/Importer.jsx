@@ -71,18 +71,29 @@ export default function Importer({ session, onImportComplete }) {
     };
 
     const rawName = getVal(['instrument', 'stock name', 'name', 'symbol', 'security', 'scrip', 'company']);
-    const qty = cleanNumber(getVal(['qty', 'quantity', 'shares', 'units', 'stock qty', 'balance']));
-    const curVal = cleanNumber(getVal(['cur. val', 'closing', 'current value', 'market value', 'total value', 'invested value', 'buy value', 'ltp']));
-    const buyPrice = cleanNumber(getVal(['avg', 'average', 'buy price', 'cost', 'purchase', 'buy rate']));
+    const qty = cleanNumber(getVal(['qty.', 'qty', 'quantity', 'shares', 'units', 'stock qty', 'balance']));
+    const ltp = cleanNumber(getVal(['ltp', 'last price', 'closing price', 'market price', 'price']));
+    const totalValInFile = cleanNumber(getVal(['cur. val', 'current value', 'market value', 'total value', 'invested value', 'buy value']));
+    const buyPrice = cleanNumber(getVal(['avg. cost', 'avg', 'average', 'buy price', 'cost', 'purchase', 'buy rate']));
 
     if (!rawName) return null;
 
     const ticker = smartResolveTicker(rawName);
 
+    // FIX: Core Valuation Logic
+    // If we have both Qty and a unit price (LTP), we prioritize calculating Value = Qty * LTP
+    // This is more robust than relying on a potentially outdated "Total Value" summary column.
+    let finalValue = totalValInFile;
+    if (ltp > 0 && qty > 0 && (finalValue === 0 || finalValue === ltp)) {
+       finalValue = ltp * qty;
+    }
+
     return {
       name: `${ticker} (${qty} shares)`,
-      value: curVal || 0,
+      value: finalValue,
       buy_price: buyPrice || null,
+      quantity: qty,
+      ltp: ltp,
       color: COLORS[index % COLORS.length],
       broker: activeBroker
     };

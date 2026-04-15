@@ -65,7 +65,7 @@ export const NSE_SECTOR_DB = {
   // ── Capital Markets ──
   BSE: 'Capital Markets', MCX: 'Capital Markets', CDSL: 'Capital Markets',
   NSDL: 'Capital Markets', ICICISGOLD: 'Capital Markets', MOTILALOFS: 'Capital Markets',
-  IIFL: 'Capital Markets', 5PAISA: 'Capital Markets', ANAND: 'Capital Markets',
+  IIFL: 'Capital Markets', '5PAISA': 'Capital Markets', ANAND: 'Capital Markets',
 
   // ── Construction ──
   LT: 'Construction', DLF: 'Construction', MACROTECH: 'Construction',
@@ -165,12 +165,34 @@ export const NSE_SECTOR_DB = {
   PAYTM: 'Financial Technology (Fintech)', POLICYBZR: 'Financial Technology (Fintech)',
   NYKAA: 'Retailing',
 
-  // ── Diversified Conglomerates
+  // ── Diversified Conglomerates ──
   ADANIENT: 'Diversified', LTIM: 'Diversified', TATAMOTORS: 'Automobiles',
+  GMRINFRA: 'Transport Infrastructure', ADANIPORTS: 'Transport Infrastructure',
+  
+  // ── Leisure Services & Hospitality ──
+  INDHOTEL: 'Leisure Services', EIHOTEL: 'Leisure Services', DEVYANI: 'Leisure Services',
+  SAPPHIRE: 'Leisure Services', LEMONTREE: 'Leisure Services',
+  
+  // ── Retailing ──
+  DMART: 'Retailing', TRENT: 'Retailing', ABFRL: 'Retailing',
+  NYKAA: 'Retailing', ZOMATO: 'Retailing',
+  
+  // ── Other ──
+  RVNL: 'Transport Infrastructure', IRFC: 'Finance', IREDA: 'Finance',
+  MAZDOCK: 'Aerospace & Defense', GARDREACH: 'Aerospace & Defense',
+  DATAINFRA: 'Telecom - Services',
 };
 
 // Normalized lookup: handles case, spaces, dashes, underscores
 export function lookupSector(ticker) {
-  const key = ticker.toUpperCase().replace(/[-.\s]/g, '_');
-  return NSE_SECTOR_DB[key] || NSE_SECTOR_DB[key.replace(/_/g, '')] || null;
+  if (!ticker) return null;
+  const raw = ticker.toUpperCase();
+  // Try exact match, then replace special chars with underscores, then remove them entirely
+  const keyWithUnderscore = raw.replace(/[&-.\s]/g, '_');
+  const keyUnified = raw.replace(/[^A-Z0-9]/g, '');
+  
+  return NSE_SECTOR_DB[raw] || 
+         NSE_SECTOR_DB[keyWithUnderscore] || 
+         NSE_SECTOR_DB[keyUnified] || 
+         null;
 }

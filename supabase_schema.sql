@@ -1,49 +1,32 @@
--- Run this in your Supabase SQL Editor
+-- Run this in your Supabase SQL Editor to fix the Importer forever.
 
--- 1. Create the Assets table (for Portfolio)
-CREATE TABLE public.assets (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    value NUMERIC NOT NULL,
-    color TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
-);
+-- 1. Update Assets table with missing columns
+ALTER TABLE public.assets ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE public.assets ADD COLUMN IF NOT EXISTS broker TEXT;
+ALTER TABLE public.assets ADD COLUMN IF NOT EXISTS buy_price NUMERIC;
+ALTER TABLE public.assets ADD COLUMN IF NOT EXISTS sector TEXT;
 
--- Insert starting portfolio
-INSERT INTO public.assets (name, value, color) VALUES 
-('Stocks', 45000, '#2dd4bf'),
-('Mutual Funds', 35000, '#0ea5e9'),
-('Savings Account', 18000, '#f59e0b'),
-('Other Banking', 4500, '#8b5cf6');
+-- 2. Optional: Enable Row Level Security (RLS) 
+-- This ensures you only see your own data if multiple users use the app
+ALTER TABLE public.assets ENABLE ROW LEVEL SECURITY;
 
--- 2. Create the Accounts table (for Bank Accounts)
-CREATE TABLE public.accounts (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    type TEXT NOT NULL,
-    balance NUMERIC NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
-);
+-- If policy exists, drop it first to avoid errors
+DROP POLICY IF EXISTS "Users can manage their own assets" ON public.assets;
 
--- Insert starting bank accounts
-INSERT INTO public.accounts (name, type, balance) VALUES 
-('Chase Checking', 'Checking', 3500),
-('HDFC Savings', 'Savings', 18000),
-('Amex Credit Card', 'Credit', -1200);
+CREATE POLICY "Users can manage their own assets" ON public.assets
+FOR ALL USING (auth.uid() = user_id);
 
--- 3. Create Transactions table (for Dashboard Recent Activity)
-CREATE TABLE public.transactions (
-    id SERIAL PRIMARY KEY,
-    description TEXT NOT NULL,
-    amount NUMERIC NOT NULL,
-    type TEXT NOT NULL,
-    date_label TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
-);
 
--- Insert starting transactions
-INSERT INTO public.transactions (description, amount, type, date_label) VALUES 
-('Stock Purchase (AAPL)', -1500, 'investment', 'Today'),
-('Salary Deposit', 5500, 'income', 'Yesterday'),
-('Mutual Fund SIP', -600, 'investment', 'Mar 15'),
-('Grocery Store', -120, 'expense', 'Mar 14');
+-- 3. Update existing tables (Accounts & Transactions) similarly
+ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+
+ALTER TABLE public.accounts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can manage their own accounts" ON public.accounts;
+CREATE POLICY "Users can manage their own accounts" ON public.accounts
+FOR ALL USING (auth.uid() = user_id);
+
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can manage their own transactions" ON public.transactions;
+CREATE POLICY "Users can manage their own transactions" ON public.transactions
+FOR ALL USING (auth.uid() = user_id);

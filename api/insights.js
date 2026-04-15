@@ -138,9 +138,10 @@ export default async function handler(req, res) {
       const fullText = title + ' ' + (item.contentSnippet || '');
       const score = deepScore(fullText);
       const grade = score > 1 ? 'Positive' : score < -1 ? 'Negative' : 'Neutral';
+      const publishTime = item.isoDate || item.pubDate || new Date().toISOString();
       news.push({
         title, link: item.link || item.guid, publisher,
-        providerPublishTime: item.isoDate || item.pubDate,
+        providerPublishTime: publishTime,
         sentimentGrade: grade, deepSentimentGrade: grade,
         contentSnippet: item.contentSnippet || 'Read the full article.',
         baseScore: score, deepScore: score,

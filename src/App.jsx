@@ -49,7 +49,33 @@ function App() {
     setDashboardLoading(true);
     const isAdmin = sess.user.email.toLowerCase() === 'surajsan1998@gmail.com';
 
-    const { data: assetData } = await supabase.from('assets').select('*').eq('user_id', sess.user.id);
+    // Fresh fetch without explicit headers (not supported by Supabase client)
+    const { data: assetData, error: assetError } = await supabase
+      .from('assets')
+      .select('*', { count: 'exact', head: false })
+      .eq('user_id', sess.user.id)
+      .order('name', { ascending: true });
+
+    // ── Auto-Fix Routine: Migrate legacy assets to structured columns ──
+    if (assetData && assetData.length > 0) {
+      const needsFix = assetData.filter(a => !a.quantity || a.quantity === 0);
+      if (needsFix.length > 0) {
+        console.log(`Auto-Fix: Migrating ${needsFix.length} legacy assets...`);
+        await Promise.all(needsFix.map(async (a) => {
+          const qtyMatch = a.name.match(/\((\d+(?:\.\d+)?)\s*shares\)/i);
+          if (qtyMatch) {
+            const qty = Number(qtyMatch[1]);
+            const ltp = a.buy_price || (a.value / qty); // Estimated ltp if missing
+            await supabase.from('assets')
+              .update({ quantity: qty, ltp: ltp })
+              .eq('id', a.id)
+              .eq('user_id', sess.user.id);
+          }
+        }));
+        // Re-fetch clean data after migration
+        return fetchDashboardData(sess);
+      }
+    }
 
     if (!assetData || assetData.length === 0) {
       setDashboardData({ assets: [], netWorth: 0, weather: { percent: 50, articleCount: 0 }, oracleData: null, projectionTimeline: [], intelligenceData: null });
@@ -146,8 +172,17 @@ function App() {
                 onBrokerFilterChange={setBrokerFilter}
               />
             } />
-            <Route path="/portfolio" element={<Portfolio session={session} onPortfolioChange={() => setDashboardData(null)} brokerFilter={brokerFilter} onBrokerFilterChange={setBrokerFilter} />} />
-            <Route path="/settings" element={<Settings session={session} />} />
+            <Route path="/portfolio" element={
+              <Portfolio 
+                session={session} 
+                assets={dashboardData?.assets || []}
+                loading={dashboardLoading}
+                onPortfolioChange={() => { setDashboardData(null); }} 
+                brokerFilter={brokerFilter} 
+                onBrokerFilterChange={setBrokerFilter} 
+              />
+            } />
+            <Route path="/settings" element={<Settings session={session} onDataWiped={() => setDashboardData(null)} />} />
             <Route path="/import" element={<Importer session={session} onImportComplete={() => setDashboardData(null)} />} />
             <Route path="/admin" element={<AdminConsole session={session} />} />
           </Routes>

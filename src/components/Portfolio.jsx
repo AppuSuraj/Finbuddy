@@ -7,28 +7,51 @@ const SECTORS = [
   'Aerospace & Defense', 'Agricultural Food & other Products', 'Agricultural, Commercial & Construction Vehicles', 'Auto Components', 'Automobiles', 'Banks', 'Beverages', 'Capital Markets', 'Cement & Cement Products', 'Chemicals & Petrochemicals', 'Cigarettes & Tobacco Products', 'Commercial Services & Supplies', 'Construction', 'Consumable Fuels', 'Consumer Durables', 'Diversified', 'Diversified FMCG', 'Diversified Metals', 'Electrical Equipment', 'Engineering Services', 'Entertainment', 'Ferrous Metals', 'Fertilizers & Agrochemicals', 'Finance', 'Financial Technology (Fintech)', 'Food Products', 'Gas', 'Healthcare Equipment & Supplies', 'Healthcare Services', 'Household Products', 'Industrial Manufacturing', 'Industrial Products', 'Insurance', 'IT - Hardware', 'IT - Services', 'IT - Software', 'Leisure Services', 'Media', 'Metals & Minerals Trading', 'Minerals & Mining', 'Non - Ferrous Metals', 'Oil', 'Other Construction Materials', 'Other Consumer Services', 'Other Utilities', 'Paper, Forest & Jute Products', 'Personal Products', 'Petroleum Products', 'Pharmaceuticals & Biotechnology', 'Power', 'Printing & Publication', 'Realty', 'Retailing', 'Telecom - Equipment & Accessories', 'Telecom - Services', 'Textiles & Apparels', 'Transport Infrastructure', 'Transport Services', 'Uncategorized'
 ];
 
-export default function Portfolio({ session, onPortfolioChange, brokerFilter, onBrokerFilterChange }) {
+export default function Portfolio({ session, assets, loading, onPortfolioChange, brokerFilter, onBrokerFilterChange }) {
   const getRelativeTime = (timestamp) => {
     if (!timestamp) return 'Just now';
-    const ms = Date.now() - (Number(timestamp) * 1000);
+    
+    const parsedDate = new Date(timestamp);
+    let targetMs = parsedDate.getTime();
+    
+    if (isNaN(targetMs)) {
+      // Fallback for numeric timestamps (seconds or ms)
+      targetMs = Number(timestamp);
+      if (!isNaN(targetMs)) {
+        if (targetMs < 10000000000) targetMs *= 1000;
+      }
+    }
+
+    if (isNaN(targetMs)) {
+      console.warn("RelativeTime: Invalid timestamp", timestamp);
+      return 'Just now';
+    }
+
+    const ms = Math.max(0, Date.now() - targetMs);
     const minutes = Math.floor(ms / 60000);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
     if (days > 0) return `${days}d ago`;
     if (hours > 0) return `${hours}h ago`;
     if (minutes > 0) return `${minutes}m ago`;
-    return 'Just now';
+    return '1m ago'; // Floor at 1m to avoid "Future" or "Just now" confusion
   };
 
   const smartResolveTicker = (rawName) => {
     if (!rawName) return '';
     let name = String(rawName).toUpperCase().trim();
-    const suffixes = [' LTD', ' LIMITED', ' CORP', ' INC', ' REITY', ' INFRA', ' CO', ' INDUSTRIES', ' SERVICES', ' ENTERPRISES'];
-    suffixes.forEach(s => {
-      if (name.includes(s)) name = name.substring(0, name.indexOf(s)).trim();
-    });
-    const mappings = { 'HDFC BANK': 'HDFCBANK', 'TATA POWER': 'TATAPOWER', 'KOTAK MAHINDRA BANK': 'KOTAKBANK', 'ICICI BANK': 'ICICIBANK', 'ADANI ENTERPRISES': 'ADANIENT' };
+    
+    const mappings = { 
+      'HDFC BANK': 'HDFCBANK', 'TATA POWER': 'TATAPOWER', 'KOTAK MAHINDRA BANK': 'KOTAKBANK', 
+      'ICICI BANK': 'ICICIBANK', 'ADANI ENTERPRISES': 'ADANIENT', 'TATA MOTORS': 'TATAMOTORS',
+      'RELIANCE INDUSTRIES': 'RELIANCE', 'BAJAJ FINANCE': 'BAJFINANCE', 'BAJAJ FINSERV': 'BAJAJFINSV',
+      'LARSEN & TOUBRO': 'LT', 'STATE BANK OF INDIA': 'SBIN', 'BHARTI AIRTEL': 'BHARTIARTL'
+    };
     if (mappings[name]) return mappings[name];
+    
+    // Handle Zerodha/Groww variations like RELIANCE-EQ or RELIANCE_EQ or RELIANCE.EQ
+    name = name.split('-')[0].split('_')[0].split('.')[0].trim();
+    
     if (name.includes('(')) name = name.split('(')[0].trim();
     return name.split(' ')[0].replace(/[^A-Z0-9&]/g, '');
   };
@@ -62,6 +85,7 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
       </div>
     );
   };
+
   const getScrutinySummary = (data) => {
     if (!data) return null;
     let summary = "";
@@ -85,8 +109,6 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
     return { main: summary, tags: signals };
   };
 
-  const [assetAllocation, setAssetAllocation] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
@@ -112,8 +134,6 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
   const isAdmin = session?.user?.email?.toLowerCase() === 'surajsan1998@gmail.com';
 
   useEffect(() => {
-    fetchAssets();
-    
     // Initialize Cooldown from LocalStorage (Safe check)
     if (session?.user?.id) {
        const lastSync = localStorage.getItem(`finbuddy_last_sync_${session.user.id}`);
@@ -131,19 +151,10 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
     }
   }, [cooldown]);
 
-  async function fetchAssets() {
-    const { data, error } = await supabase.from('assets').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true });
-    if (!error && data) {
-      setAssetAllocation(data);
-    }
-    setLoading(false);
-  }
-
   async function handleAddAsset(e) {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Add defensive check in case the user has not migrated Supabase DB yet
     const { error } = await supabase.from('assets').insert([
       { 
         name: newAsset.name, 
@@ -157,14 +168,14 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
     if (!error) {
       setShowForm(false);
       setNewAsset({ name: '', value: '', color: '#2dd4bf', buy_price: '' });
-      fetchAssets(); 
+      if (onPortfolioChange) onPortfolioChange();
     }
     setIsSubmitting(false);
   }
 
   // Engine for Sorting & Filtering
   const filteredAndSortedAssets = useMemo(() => {
-    let result = assetAllocation.filter(a => {
+    let result = assets.filter(a => {
       const matchesSearch = a.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesBroker = brokerFilter === 'All' || a.broker === brokerFilter;
       return matchesSearch && matchesBroker;
@@ -183,19 +194,7 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
       result.sort((a, b) => a.name.localeCompare(b.name));
     }
     return result;
-  }, [assetAllocation, searchQuery, sortBy, selectedSectorFilter]);
-
-  // Yahoo Finance Fetcher Layer
-  const fetchPrice = async (ticker, suffix) => {
-    try {
-      const res = await fetch(`/api/finance/${ticker}.${suffix}`);
-      const data = await res.json();
-      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      return price ? Number(price) : null;
-    } catch {
-       return null;
-    }
-  };
+  }, [assets, searchQuery, sortBy, selectedSectorFilter, brokerFilter]);
 
   async function handleRefreshLivePrices() {
     if (!isAdmin && cooldown > 0) {
@@ -203,9 +202,9 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
        return;
     }
 
-    setRefreshing(true);
+    const newAllocations = [...assets];
     let updatedCount = 0;
-    const newAllocations = [...assetAllocation];
+    setRefreshing(true);
 
     // Build a resilient fetch proxy preventing infinite hangs
     const fetchWithTimeout = async (url, ms = 8000) => {
@@ -225,21 +224,23 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
       } catch { return null; }
     };
 
-    let targetAllocations = newAllocations;
-    
+    let targetAllocations = assets;
     if (!isAdmin && targetAllocations.length > 5) {
-       targetAllocations = newAllocations.slice(0, 5);
+       targetAllocations = assets.slice(0, 5);
        alert("GUEST ACCOUNT BOUNDARY: Throttling live market scrape to top 5 portfolio assets to prevent massive proxy rate-limiting.");
     }
     
-    const promises = targetAllocations.map(async (asset, i) => {
+    const promises = targetAllocations.map(async (asset) => {
       const ticker = smartResolveTicker(asset.name);
       if (!ticker) return;
 
-      const qtyMatch = asset.name.match(/\((\d+(?:\.\d+)?)\s*shares\)/i);
-      const qty = qtyMatch ? Number(qtyMatch[1]) : 1;
+      // Use dedicated quantity column if available, else fallback to name parsing
+      let qty = Number(asset.quantity);
+      if (!qty || qty === 0) {
+        const qtyMatch = asset.name.match(/\((\d+(?:\.\d+)?)\s*shares\)/i);
+        qty = qtyMatch ? Number(qtyMatch[1]) : 1;
+      }
 
-      // Fire price and profile scraping massively parallel
       let [priceRes, profileRes] = await Promise.allSettled([
           fetchPriceWithTimeout(ticker, 'NS').then(p => p === null ? fetchPriceWithTimeout(ticker, 'BO') : p),
           (!asset.sector || asset.sector === 'Unknown' || asset.sector === 'Uncategorized') 
@@ -248,25 +249,39 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
       ]);
 
       const finalPrice = priceRes.status === 'fulfilled' ? priceRes.value : null;
-      let sectorStr = asset.sector;
+      let sectorStr = asset.sector || 'Uncategorized';
       if (profileRes.status === 'fulfilled' && profileRes.value.sector && profileRes.value.sector !== 'Unknown') {
           sectorStr = profileRes.value.sector;
       }
 
       if (finalPrice !== null) {
         const newVal = finalPrice * qty;
-        newAllocations[i].value = newVal;
-        newAllocations[i].sector = sectorStr;
-        await supabase.from('assets').update({ value: newVal, sector: sectorStr }).eq('id', asset.id);
-        updatedCount++;
+        console.log(`[DIAGNOSTIC] Attempting DB Update for ${asset.name}: Ticker=${ticker}, Sector=${sectorStr}, Value=${newVal}`);
+        const { error } = await supabase.from('assets')
+          .update({ 
+            value: newVal, 
+            sector: sectorStr,
+            ltp: finalPrice,
+            quantity: qty 
+          })
+          .eq('id', asset.id)
+          .eq('user_id', session.user.id);
+
+        if (error) {
+          console.error(`[DIAGNOSTIC] ${asset.name} Update Failed:`, error.message);
+        } else {
+          console.log(`[DIAGNOSTIC] ${asset.name} Update Success.`);
+          updatedCount++;
+        }
+      } else {
+        console.warn(`[DIAGNOSTIC] No Live Price for ${ticker}. Skipping DB update.`);
       }
     });
 
-    // Wait for all 20+ connections to clear (or timeout at 8s)
     await Promise.allSettled(promises);
     
-    setAssetAllocation([...newAllocations]);
     setRefreshing(false);
+    if (onPortfolioChange) onPortfolioChange();
     
     if (!isAdmin && session?.user?.id) {
        setCooldown(300);
@@ -295,7 +310,7 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
       const prof = profileRes.status === 'fulfilled' ? profileRes.value : null;
       if (prof?.sector && prof.sector !== 'Unknown') {
         await supabase.from('assets').update({ sector: prof.sector }).eq('id', asset.id);
-        fetchAssets();
+        if (onPortfolioChange) onPortfolioChange();
         if (selectedAsset?.id === asset.id) setSelectedAsset({...selectedAsset, sector: prof.sector});
       }
       setDeepScrutinyData(tech);
@@ -310,7 +325,6 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
     setDeepScrutinyData(null);
     setIsEditingSector(false);
     
-    // Parse ticker name
     const ticker = smartResolveTicker(asset.name);
 
     try {
@@ -319,7 +333,6 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
       let res = await fetch(`/api/insights?symbol=${ticker}.NS&name=${queryName}${querySector}`);
       let data = await res.json();
       
-      // Fallback logic
       if (data.error || (!data.profile && (!data.news || data.news.length === 0))) {
          res = await fetch(`/api/insights?symbol=${ticker}.BO&name=${queryName}${querySector}`);
          data = await res.json();
@@ -334,38 +347,30 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
 
   const handleManualSectorUpdate = async (newSec) => {
     if (!selectedAsset) return;
-    
     const { error } = await supabase.from('assets').update({ sector: newSec }).eq('id', selectedAsset.id);
     if (!error) {
-       // Update local state instantly
-       const updatedAllocations = assetAllocation.map(a => a.id === selectedAsset.id ? { ...a, sector: newSec } : a);
-       setAssetAllocation(updatedAllocations);
+       if (onPortfolioChange) onPortfolioChange();
        setSelectedAsset({ ...selectedAsset, sector: newSec });
        setIsEditingSector(false);
     }
   };
 
-  const totalValue = assetAllocation.reduce((acc, curr) => acc + Number(curr.value), 0);
-
-  // Deterministic HSL Generator for 58+ Categories
   const getSectorColor = (sector) => {
     if (!sector || sector === 'Uncategorized' || sector === 'Unknown') return '#64748b';
-    
-    // Hash function to turn string into consistent hue
     let hash = 0;
     for (let i = 0; i < sector.length; i++) {
         hash = sector.charCodeAt(i) + ((hash << 5) - hash);
     }
-    
     const hue = Math.abs(hash % 360);
-    // Fixed Saturation & Lightness for a premium "Oceanic Dark" feel
     return `hsl(${hue}, 70%, 55%)`;
   };
+
+  const totalValue = filteredAndSortedAssets.reduce((acc, curr) => acc + Number(curr.value), 0);
 
   const finalGroupedAssets = useMemo(() => {
     if (chartView === 'sector') {
       const sectorMap = {};
-      assetAllocation.forEach(a => {
+      filteredAndSortedAssets.forEach(a => {
          const sec = a.sector || 'Uncategorized';
          if(!sectorMap[sec]) sectorMap[sec] = { id: sec, name: sec, value: 0, color: getSectorColor(sec), isSector: true };
          sectorMap[sec].value += Number(a.value);
@@ -373,15 +378,15 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
       return Object.values(sectorMap).sort((a,b) => b.value - a.value);
     }
     
-    if (assetAllocation.length <= 7) return assetAllocation;
-    const sorted = [...assetAllocation].sort((a,b) => Number(b.value) - Number(a.value));
+    if (filteredAndSortedAssets.length <= 7) return filteredAndSortedAssets;
+    const sorted = [...filteredAndSortedAssets].sort((a,b) => Number(b.value) - Number(a.value));
     const top = sorted.slice(0, 6);
     const othersValue = sorted.slice(6).reduce((acc, curr) => acc + Number(curr.value), 0);
     return [
       ...top,
       { id: 'others', name: 'Other Assets', value: othersValue, color: '#475569', isOther: true }
     ];
-  }, [assetAllocation, chartView]);
+  }, [filteredAndSortedAssets, chartView]);
 
   return (
     <div className="animate-in">
@@ -451,7 +456,7 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
 
       {loading ? (
         <p className="text-muted">Analyzing Assets from Database...</p>
-      ) : assetAllocation.length === 0 ? (
+      ) : assets.length === 0 ? (
         <div className="glass-panel text-center" style={{ padding: '40px' }}>
           <p className="text-muted">No assets found. Import from CSV or Add manually.</p>
         </div>
@@ -552,7 +557,7 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
               
               {viewMode === 'list' ? (
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {filteredAndSortedAssets.map((asset, i) => {
+                  {filteredAndSortedAssets.map((asset) => {
                     const percentage = totalValue === 0 ? 0 : ((asset.value / totalValue) * 100).toFixed(1);
                     return (
                       <div key={asset.id} style={styles.assetCard} onClick={() => handleSelectAsset(asset)}>
@@ -591,10 +596,10 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAndSortedAssets.map((asset, i) => {
+                    {filteredAndSortedAssets.map((asset) => {
                       const percentage = totalValue === 0 ? 0 : ((asset.value / totalValue) * 100).toFixed(1);
                       return (
-                        <tr key={asset.id} onClick={() => handleSelectAsset(asset)} style={{ cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s', ':hover': { background: 'rgba(255,255,255,0.02)' }}}>
+                        <tr key={asset.id} onClick={() => handleSelectAsset(asset)} style={{ cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }}>
                           <td style={{ padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: asset.color }}></div>
@@ -630,7 +635,6 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
         </div>
       )}
 
-      {/* Translucent Fullscreen Modal Overlay */}
       {selectedAsset && (
         <div 
           className="animate-in" 
@@ -714,7 +718,6 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
                    </p>
                  )}
 
-                 {/* Deep Scrutiny Technical Analysis Panel */}
                  {(deepScrutinyLoading || deepScrutinyData) && (
                    <div style={{ marginBottom: '32px', background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.2)', borderRadius: '14px', padding: '24px' }}>
                      <h3 style={{ margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
@@ -727,7 +730,6 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
                        </div>
                      ) : deepScrutinyData && !deepScrutinyData.error ? (
                        <>
-                         {/* Trend Badge + Crossover Signal */}
                          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
                            <span style={{ padding: '6px 14px', borderRadius: '20px', fontWeight: 700, fontSize: '12px', background: deepScrutinyData.trend?.includes('Up') ? 'rgba(16,185,129,0.15)' : deepScrutinyData.trend?.includes('Down') ? 'rgba(239,68,68,0.15)' : 'rgba(234,179,8,0.15)', color: deepScrutinyData.trend?.includes('Up') ? '#10b981' : deepScrutinyData.trend?.includes('Down') ? '#ef4444' : '#eab308' }}>
                              📈 {deepScrutinyData.trend}
@@ -743,20 +745,19 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
                              </span>
                            )}
                          </div>
-                                                   <div style={{ padding: '16px', background: 'rgba(45,212,191,0.06)', borderRadius: '12px', marginBottom: '20px', border: '1px solid rgba(45,212,191,0.15)' }}>
-                            <p style={{ fontSize: '14px', color: '#fff', margin: '0 0 10px', lineHeight: '1.5', fontWeight: 500 }}>
-                              {getScrutinySummary(deepScrutinyData).main}
-                            </p>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              {getScrutinySummary(deepScrutinyData).tags.map((tag, i) => (
-                                <p key={i} style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-primary)' }} /> {tag}
-                                </p>
-                              ))}
-                            </div>
-                          </div>
+                         <div style={{ padding: '16px', background: 'rgba(45,212,191,0.06)', borderRadius: '12px', marginBottom: '20px', border: '1px solid rgba(45,212,191,0.15)' }}>
+                             <p style={{ fontSize: '14px', color: '#fff', margin: '0 0 10px', lineHeight: '1.5', fontWeight: 500 }}>
+                               {getScrutinySummary(deepScrutinyData).main}
+                             </p>
+                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                               {getScrutinySummary(deepScrutinyData).tags.map((tag, i) => (
+                                 <p key={i} style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                   <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-primary)' }} /> {tag}
+                                 </p>
+                               ))}
+                             </div>
+                           </div>
 
-                         {/* DMA + RSI Grid */}
                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '16px' }}>
                            <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '14px', border: `1px solid ${deepScrutinyData.dma50 ? (deepScrutinyData.aboveDma50 ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)') : 'rgba(255,255,255,0.05)'}` }}>
                              <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '1px' }}>DMA 50</p>
@@ -799,54 +800,6 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
                              )}
                            </div>
                          </div>
-
-                         {/* Institutional Flow & HNI */}
-                          {deepScrutinyData.institutional && (
-                            <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '12px', padding: '16px', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                                <p style={{ fontSize: '13px', margin: 0, fontWeight: 700, color: 'var(--text-primary)' }}>🏦 Institutional Flow & HNI Activity</p>
-                                <span style={{ fontSize: '10px', background: 'var(--accent-gradient)', color: '#041014', padding: '2px 8px', borderRadius: '12px', marginLeft: 'auto', fontWeight: 600 }}>PREMIUM</span>
-                              </div>
-                              
-                              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                                <div style={{ flex: 1, minWidth: '130px', background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px' }}>
-                                  <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', margin: '0 0 4px', textTransform: 'uppercase' }}>FII Sentiment</p>
-                                  <p style={{ fontSize: '14px', margin: 0, fontWeight: 600, color: deepScrutinyData.institutional.fii === 'Bullish' ? '#10b981' : deepScrutinyData.institutional.fii === 'Bearish' ? '#ef4444' : '#eab308' }}>{deepScrutinyData.institutional.fii}</p>
-                                </div>
-                                <div style={{ flex: 1, minWidth: '130px', background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px' }}>
-                                  <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', margin: '0 0 4px', textTransform: 'uppercase' }}>DII Sentiment</p>
-                                  <p style={{ fontSize: '14px', margin: 0, fontWeight: 600, color: deepScrutinyData.institutional.dii === 'Bullish' ? '#10b981' : deepScrutinyData.institutional.dii === 'Bearish' ? '#ef4444' : '#eab308' }}>{deepScrutinyData.institutional.dii}</p>
-                                </div>
-                                <div style={{ flex: 1.5, minWidth: '180px', background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px' }}>
-                                  <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', margin: '0 0 4px', textTransform: 'uppercase' }}>Flow Activity</p>
-                                  <p style={{ fontSize: '14px', margin: 0, fontWeight: 600, color: '#fff' }}>{deepScrutinyData.institutional.activity}</p>
-                                </div>
-                              </div>
-                              
-                              <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: 1.5, borderLeft: '3px solid var(--accent-primary)', paddingLeft: '10px' }}>
-                                {deepScrutinyData.institutional.description}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Bollinger Band + Volume */}
-                         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                           {deepScrutinyData.bollingerPosition && (
-                             <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.03)', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.07)' }}>
-                               📊 Bollinger: <strong style={{ color: '#fff' }}>{deepScrutinyData.bollingerPosition}</strong>
-                             </div>
-                           )}
-                           {deepScrutinyData.volumeTrend && (
-                             <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.03)', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.07)' }}>
-                               📦 Volume: <strong style={{ color: '#fff' }}>{deepScrutinyData.volumeTrend}</strong>
-                             </div>
-                           )}
-                           {deepScrutinyData.pattern && (
-                             <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.03)', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.07)' }}>
-                               🕯️ Pattern: <strong style={{ color: '#fff' }}>{deepScrutinyData.pattern.desc}</strong>
-                             </div>
-                           )}
-                         </div>
                        </>
                      ) : deepScrutinyData ? (
                         <div style={{ padding: '20px', textAlign: 'center' }}>
@@ -876,7 +829,7 @@ export default function Portfolio({ session, onPortfolioChange, brokerFilter, on
                          <div className="flex gap-2 items-center">
                            {!isDeepScanned && (
                              <button onClick={() => setDeepScanStates(prev => ({...prev, [idx]: true}))} className="hover-scale" style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap' }}>
-                               🔬 Deep Scan
+                                🔬 Deep Scan
                              </button>
                            )}
                            <span style={{ 
@@ -916,30 +869,15 @@ const styles = {
   input: {
     width: '100%', padding: '8px 12px', borderRadius: '8px', 
     background: 'var(--bg-color)', border: '1px solid var(--card-border)', 
-    color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', fontSize: '14px'
+    color: '#fff', outline: 'none', fontFamily: 'inherit', fontSize: '14px'
   },
   grid: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(400px, 1fr) 1fr',
-    gap: '30px'
+    display: 'grid', gridTemplateColumns: 'minmax(400px, 1fr) 1.2fr', gap: '30px', alignItems: 'start'
   },
   centerText: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    textAlign: 'center'
+    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center'
   },
   assetCard: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px',
-    background: 'rgba(0,0,0,0.1)',
-    borderRadius: '12px',
-    border: '1px solid var(--card-border)',
-    transition: 'all 0.2s ease',
-    cursor: 'pointer'
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderRadius: '14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', transition: 'all 0.2s', ':hover': { transform: 'translateX(4px)', background: 'rgba(255,255,255,0.05)' }
   }
 };
-

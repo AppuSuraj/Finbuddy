@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { User, Palette, Shield } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
-export default function Settings() {
+export default function Settings({ session, onDataWiped }) {
   const [profileName, setProfileName] = useState('Suraj');
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [saved, setSaved] = useState(false);
@@ -26,13 +26,22 @@ export default function Settings() {
   };
 
   const handleEraseData = async () => {
+    if (!session?.user?.id) return;
+    
     if (window.confirm("Are you SURE? This will permanently delete all your transactions, accounts, and assets.")) {
       setErasing(true);
       try {
-        await supabase.from('transactions').delete().neq('id', 0);
-        await supabase.from('accounts').delete().neq('id', 0);
-        await supabase.from('assets').delete().neq('id', 0);
+        // Correctly scope the delete to the active user ID
+        // RLS prevents deleting data that doesn't belong to you anyway, 
+        // but explicit scoping is cleaner and faster.
+        await Promise.all([
+          supabase.from('transactions').delete().eq('user_id', session.user.id),
+          supabase.from('accounts').delete().eq('user_id', session.user.id),
+          supabase.from('assets').delete().eq('user_id', session.user.id)
+        ]);
+
         window.alert("All financial data has been erased.");
+        if (onDataWiped) onDataWiped();
       } catch (err) {
         console.error(err);
         window.alert("Failed to erase data.");
