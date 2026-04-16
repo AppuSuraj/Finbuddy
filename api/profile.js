@@ -189,6 +189,20 @@ const NSE_SECTOR_DB = {
   NIFTYBEES: 'Index Funds / ETFs',
   NIFTY_BEES: 'Index Funds / ETFs',
   GOLDBEES: 'Commodities',
+  
+  // NEW BATCH
+  TATACONSUM: 'Diversified FMCG',
+  TATATECH: 'IT - Services',
+  SUZLON: 'Power',
+  CASTROLIND: 'Petroleum Products',
+  BDL: 'Aerospace & Defense',
+  TATACAP: 'Finance',
+  UNOMINDA: 'Auto Components',
+  OIL: 'Oil',
+  GATEWAY: 'Transport Services',
+  TMPV: 'Automobiles',
+  GOLDCASE: 'Commodities',
+  JUNIORBEES: 'Index Funds / ETFs',
 };
 
 function localLookupSector(ticker) {
@@ -266,6 +280,12 @@ export default async function handler(req, res) {
       if (t.includes('TCI')) sector = 'Transport Services';
       if (t.includes('SHYAM') || t.includes('METL')) sector = 'Ferrous Metals';
       if (t.includes('JSWENERGY') || t.includes('JSW')) sector = 'Power';
+      
+      // Keyword fallback
+      if (t.includes('BEES')) sector = 'Index Funds / ETFs';
+      if (t.includes('TATA') && t.includes('CONSUM')) sector = 'Diversified FMCG';
+      if (t.includes('TATA') && (t.includes('TECH') || t.includes('ELXSI'))) sector = 'IT - Services';
+      if (t.includes('TATA') && t.includes('MOTORS')) sector = 'Automobiles';
     }
 
     res.status(200).json({ sector });
