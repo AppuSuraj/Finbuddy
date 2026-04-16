@@ -91,28 +91,38 @@ function App() {
     const top4Names = sorted.slice(0, 4).map(a => encodeURIComponent(a.name.split('(')[0].trim())).join(',');
     const oracleNames = encodeURIComponent(sorted.slice(0, 5).map(a => a.name.split('(')[0].trim()).join(','));
 
-    // Start all heavy API calls in parallel
-    const [sentimentRes, oracleRes, analyticsRes, pulseRes] = await Promise.allSettled([
-      fetch(`/api/portfolio-sentiment?names=${isAdmin ? top10Names : top4Names}${isAdmin ? '&deep=true' : ''}`),
+    // ── STEP 1: Fetch Sentiment FIRST for use in Analytics ──
+    let weather = { percent: 50, articleCount: 0 };
+    let intelligenceData = null;
+    
+    try {
+      const sentimentRes = await fetch(`/api/portfolio-sentiment?names=${isAdmin ? top10Names : top4Names}${isAdmin ? '&deep=true' : ''}`);
+      if (sentimentRes.ok) {
+        const s = await sentimentRes.json();
+        if (typeof s.percent === 'number') {
+          weather = { percent: s.percent, articleCount: s.articleCount || 0 };
+          if (isAdmin && s.breakdown) intelligenceData = s.breakdown;
+        }
+      }
+    } catch (e) {
+      console.error('Sentiment fetch fail:', e);
+    }
+
+    // ── STEP 2: Fetch Oracle, Analytics (with sentiment), and Market Pulse in parallel ──
+    const [oracleRes, analyticsRes, pulseRes] = await Promise.allSettled([
       fetch(`/api/oracle?names=${oracleNames}`),
-      fetch('/api/analytics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assets: sorted }) }),
+      fetch('/api/analytics', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ assets: sorted, sentiment: weather.percent }) 
+      }),
       fetch('/api/market-pulse')
     ]);
 
-    let weather = { percent: 50, articleCount: 0 };
-    let intelligenceData = null;
     let oracleData = null;
     let projectionTimeline = [];
     let analyticsData = null;
     let marketPulse = null;
-
-    if (sentimentRes.status === 'fulfilled' && sentimentRes.value.ok) {
-      const s = await sentimentRes.value.json();
-      if (typeof s.percent === 'number') {
-        weather = { percent: s.percent, articleCount: s.articleCount || 0 };
-        if (isAdmin && s.breakdown) intelligenceData = s.breakdown;
-      }
-    }
 
     if (oracleRes.status === 'fulfilled' && oracleRes.value.ok) {
       const pred = await oracleRes.value.json();

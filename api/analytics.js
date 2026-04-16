@@ -70,6 +70,37 @@ export default async function handler(req, res) {
       color = '#94a3b8';
     }
 
+    // ── Qualitative Intelligence Audit ──
+    const auditProps = {
+      pros: [],
+      cons: [],
+      verdict: ''
+    };
+
+    const sentiment = Number(req.body.sentiment) || 50;
+
+    // Pros Logic
+    if (Object.keys(sectorWeights).length >= 7) auditProps.pros.push('High Resilience: Portfolio spans enough industries to weather sector-specific crashes.');
+    if (expectedAnnualDividend > (totalValue * 0.015)) auditProps.pros.push('Income Engine: Your holdings are optimized for passive cash flow generation.');
+    if (sentiment > 65) auditProps.pros.push('Market Momentum: Top holdings currently have a strong "Bullish" news bias.');
+    if (maxSectorWeight < 0.3) auditProps.pros.push('Diversification Leader: No single industry dominates more than 30% of your net worth.');
+
+    // Cons Logic
+    if (maxSectorWeight > 0.45) auditProps.cons.push(`Over-Concentration: You are heavily reliant on the ${maxSectorName} cycle.`);
+    if (sentiment < 45) auditProps.cons.push('News Pressure: Recent market intelligence is "Bearish" on your largest holdings.');
+    if (Object.keys(sectorWeights).length < 5) auditProps.cons.push('Contagion Risk: Portfolio is split across too few sectors; diversity is low.');
+
+    // Verdict Logic
+    if (healthGrade.startsWith('A') && sentiment > 60) {
+      auditProps.verdict = 'Your portfolio is in an elite "Growth State". Strong diversification is shielding you from risk while positive news sentiment provides a significant tailwind.';
+    } else if (healthGrade === 'C' || maxSectorWeight > 0.6) {
+      auditProps.verdict = 'High concentration identified. Your portfolio is currently "Fragile" to sector-specific shocks. One bad news cycle in your lead sector could cause a significant drawdown.';
+    } else {
+      auditProps.verdict = 'Stable foundation. You have built a solid base, but news sentiment is neutral. Focus on adding uncorrelated assets to start building a true "Wealth Shield".';
+    }
+
+    if (auditProps.pros.length === 0) auditProps.pros.push('Portfolio Verified: Core holdings are tracked and live intelligence is active.');
+
     // 3. Fetch Index Data for Alpha Chart (NIFTY & SENSEX)
     // ^NSEI = NIFTY 50, ^BSESN = BSE SENSEX
     const indices = ['^NSEI', '^BSESN'];
@@ -148,7 +179,8 @@ export default async function handler(req, res) {
         grade: healthGrade,
         riskFactor: riskFactor,
         correctionTip: correctionTip,
-        color: color
+        color: color,
+        audit: auditProps
       },
       alphaData: alphaChartData,
       totalHoldingsValue: totalValue

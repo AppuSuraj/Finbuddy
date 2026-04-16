@@ -50,9 +50,8 @@ export default async function handler(req, res) {
       const html = await resp.text();
 
       // Robust Regex-based extraction looking for the 24K 10g rate
-      // The table row usually looks like: <td>10</td> <td>₹71,230</td>
-      // We look for a pattern where 10 is followed by a price cell
-      const tableMatch = html.match(/<td>\s*10\s*<\/td>\s*<td>\s*(₹?[\d,]+)\s*<\/td>/i);
+      // The table row usually looks like: <td>10 grams</td> <td>₹71,230</td>
+      const tableMatch = html.match(/<td>\s*10(?:\s*grams)?\s*<\/td>\s*<td>\s*(₹?[\d,]+)\s*<\/td>/i);
       let price = tableMatch ? tableMatch[1] : null;
 
       if (!price) {

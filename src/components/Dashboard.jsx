@@ -35,6 +35,7 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
   const navigate = useNavigate();
   const [expandedStock, setExpandedStock] = useState(null);
   const [alphaBase, setAlphaBase] = useState('Nifty50');
+  const [showAudit, setShowAudit] = useState(false);
 
   const email = session?.user?.email || '';
   const isAdmin = email.toLowerCase() === 'surajsan1998@gmail.com';
@@ -67,7 +68,7 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
   const hasAssets = filteredAssets.length > 0;
   
   const currentNetWorth = filteredAssets.reduce((acc, a) => acc + Number(a.value || 0), 0);
-  const totalBuyValue = filteredAssets.reduce((acc, a) => acc + (a.buy_price ? Number(a.buy_price) : 0), 0);
+  const totalBuyValue = filteredAssets.reduce((acc, a) => acc + (a.buy_price ? (Number(a.buy_price) * Number(a.quantity || 1)) : 0), 0);
   const pnl = totalBuyValue > 0 ? currentNetWorth - totalBuyValue : null;
   
   const sentimentColor = weather.percent > 65 ? '#2dd4bf' : weather.percent < 45 ? '#ef4444' : '#eab308';
@@ -82,6 +83,70 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
 
   return (
     <div className="animate-in" style={{ maxWidth: '1400px' }}>
+
+      {/* ── Health Audit Modal ── */}
+      {showAudit && analyticsData?.health?.audit && (
+        <div 
+          className="animate-in" 
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(16px)', padding: '20px' }}
+          onClick={() => setShowAudit(false)}
+        >
+          <div 
+            className="glass-panel" 
+            style={{ width: '100%', maxWidth: '650px', padding: '40px', background: 'rgba(10,25,30,0.98)', border: `1px solid ${analyticsData.health.color}` }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+               <h2 style={{ margin: 0, fontSize: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                 <ShieldCheck size={24} style={{ color: analyticsData.health.color }} /> Portfolio Intelligence Audit
+               </h2>
+               <button 
+                 onClick={() => setShowAudit(false)}
+                 style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '8px 16px', borderRadius: '10px', cursor: 'pointer', fontSize: '12px' }}>
+                 Close
+               </button>
+            </div>
+
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '24px', borderRadius: '16px', borderLeft: `6px solid ${analyticsData.health.color}`, marginBottom: '32px' }}>
+               <p style={{ fontSize: '10px', margin: '0 0 8px', letterSpacing: '1.5px', textTransform: 'uppercase', color: analyticsData.health.color, fontWeight: 700 }}>EXECUTIVE VERDICT</p>
+               <p style={{ fontSize: '16px', fontWeight: 600, margin: 0, lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>{analyticsData.health.audit.verdict}</p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '32px' }}>
+               <div>
+                  <h4 style={{ color: '#10b981', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                    <TrendingUp size={14} /> Intelligence Pros
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {analyticsData.health.audit.pros.map((p, i) => (
+                      <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#10b981', fontSize: '12px', marginTop: '2px' }}>•</span>
+                        <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', margin: 0, lineHeight: 1.4 }}>{p}</p>
+                      </div>
+                    ))}
+                  </div>
+               </div>
+               <div>
+                  <h4 style={{ color: '#ef4444', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                    <Zap size={14} /> Risk Factors
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {analyticsData.health.audit.cons.map((p, i) => (
+                      <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '2px' }}>•</span>
+                        <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', margin: 0, lineHeight: 1.4 }}>{p}</p>
+                      </div>
+                    ))}
+                  </div>
+               </div>
+            </div>
+
+            <p style={{ fontSize: '11px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', margin: 0, letterSpacing: '0.5px' }}>
+              Audit generated based on {assets.length} holdings and current {weather.percent}% market sentiment score.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Market Pulse Ticker ── */}
       <div style={{ display: 'flex', overflowX: 'auto', marginBottom: '28px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', scrollbarWidth: 'none' }}>
@@ -171,7 +236,18 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
                     <span style={{ marginLeft: 'auto', fontSize: '24px', fontWeight: 800, color: analyticsData.health.color }}>{analyticsData.health.grade}</span>
                   </div>
                   <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff', margin: '0 0 4px' }}>{analyticsData.health.riskFactor}</p>
-                  <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: 1.5 }}>{analyticsData.health.correctionTip}</p>
+                  <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: '0 0 20px', lineHeight: 1.5 }}>{analyticsData.health.correctionTip}</p>
+                  
+                  <div style={{ marginTop: 'auto' }}>
+                    <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.25)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '10px' }}>Pro Intelligence Active</p>
+                    <button 
+                      onClick={() => setShowAudit(true)}
+                      className="btn btn-primary" 
+                      style={{ width: '100%', fontSize: '12px', background: analyticsData.health.color, color: '#041014', border: 'none', fontWeight: 700, padding: '10px' }}
+                    >
+                      Comprehensive Audit
+                    </button>
+                  </div>
                 </div>
 
                 {/* Passive Income Card */}
