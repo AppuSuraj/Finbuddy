@@ -172,8 +172,19 @@ export default async function handler(req, res) {
         Portfolio: Math.round((point.value * portfolioMultiplier + drift) * 10) / 10
       });
     });
+    
+    // Calculate Final Performance Summary for Alpha Note
+    const last = alphaChartData[alphaChartData.length - 1] || {};
+    const alphaSummary = {
+      niftyAlpha: Math.round(((last.Portfolio || 0) - (last.Nifty50 || 0)) * 10) / 10,
+      sensexAlpha: Math.round(((last.Portfolio || 0) - (last.Sensex || 0)) * 10) / 10,
+      portfolioReturn: last.Portfolio || 0,
+      niftyReturn: last.Nifty50 || 0,
+      sensexReturn: last.Sensex || 0
+    };
 
     res.status(200).json({
+      alphaSummary,
       dividends: {
         annual: Math.round(expectedAnnualDividend),
         monthly: Math.round(expectedAnnualDividend / 12)

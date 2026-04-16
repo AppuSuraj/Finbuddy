@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { ArrowUpRight, Radar, Radio, Zap, BarChart2, ShieldCheck, FileUp, ArrowRight, TrendingUp, Activity, Lock, Newspaper, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { ArrowUpRight, Radar, Radio, Zap, BarChart2, ShieldCheck, FileUp, ArrowRight, TrendingUp, Activity, Lock, Newspaper, ChevronDown, ChevronUp, RefreshCw, Info } from 'lucide-react';
 
 const FEATURES = [
   {
@@ -265,10 +265,18 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
 
               {/* Alpha Chart */}
               <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                   <div>
-                    <h3 style={{ margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '8px' }}><Activity size={18} className="text-secondary" /> Alpha Tracking</h3>
-                    <p className="text-muted" style={{ fontSize: '12px', margin: 0 }}>1-Year Relative Performance: Portfolio vs Market</p>
+                    <h3 style={{ margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Activity size={18} className="text-secondary" /> Alpha Tracking
+                      <div className="tooltip-trigger" style={{ cursor: 'help', display: 'flex' }}>
+                         <Info size={14} style={{ color: 'rgba(255,255,255,0.3)' }} />
+                         <span className="tooltip-text" style={{ fontSize: '11px', width: '220px' }}>
+                           Retrospective Projection: This models your <strong>current holdings</strong> against the last 12 months of market data.
+                         </span>
+                      </div>
+                    </h3>
+                    <p className="text-muted" style={{ fontSize: '12px', margin: 0 }}>Relative Performance Index (1-Year)</p>
                   </div>
                   <select 
                     value={alphaBase} 
@@ -279,6 +287,20 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
                     <option value="Sensex">vs SENSEX</option>
                   </select>
                 </div>
+
+                {/* Alpha Note Summary */}
+                {analyticsData.alphaSummary && (
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', padding: '12px 16px', borderRadius: '10px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: (alphaBase === 'Nifty50' ? analyticsData.alphaSummary.niftyAlpha : analyticsData.alphaSummary.sensexAlpha) >= 0 ? 'var(--success)' : 'var(--danger)' }} />
+                    <p style={{ fontSize: '13px', margin: 0, color: 'rgba(255,255,255,0.8)' }}>
+                      Your portfolio has <strong>{(alphaBase === 'Nifty50' ? analyticsData.alphaSummary.niftyAlpha : analyticsData.alphaSummary.sensexAlpha) >= 0 ? 'outperformed' : 'underperformed'}</strong> {alphaBase === 'Nifty50' ? 'Nifty 50' : 'Sensex'} by 
+                      <span style={{ color: (alphaBase === 'Nifty50' ? analyticsData.alphaSummary.niftyAlpha : analyticsData.alphaSummary.sensexAlpha) >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 700, margin: '0 4px' }}>
+                        {Math.abs(alphaBase === 'Nifty50' ? analyticsData.alphaSummary.niftyAlpha : analyticsData.alphaSummary.sensexAlpha)}%
+                      </span>
+                      over the last 12 months.
+                    </p>
+                  </div>
+                )}
                 
                 <div style={{ flex: 1, minHeight: '220px', position: 'relative' }}>
                   {analyticsData.alphaData && analyticsData.alphaData.length > 0 ? (
@@ -293,7 +315,8 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
                           labelStyle={{ color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}
                           itemStyle={{ fontSize: '13px', padding: '2px 0' }}
                         />
-                        <Line type="monotone" name="Portfolio" dataKey="Portfolio" stroke="var(--accent-primary)" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                        <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', paddingBottom: '20px' }} />
+                        <Line type="monotone" name="Your Portfolio" dataKey="Portfolio" stroke="var(--accent-primary)" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
                         <Line type="monotone" name={alphaBase === 'Nifty50' ? 'NIFTY 50' : 'SENSEX'} dataKey={alphaBase} stroke="rgba(255,255,255,0.3)" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={{ r: 4 }} />
                       </LineChart>
                     </ResponsiveContainer>
