@@ -92,10 +92,11 @@ function App() {
     const oracleNames = encodeURIComponent(sorted.slice(0, 5).map(a => a.name.split('(')[0].trim()).join(','));
 
     // Start all heavy API calls in parallel
-    const [sentimentRes, oracleRes, analyticsRes] = await Promise.allSettled([
+    const [sentimentRes, oracleRes, analyticsRes, pulseRes] = await Promise.allSettled([
       fetch(`/api/portfolio-sentiment?names=${isAdmin ? top10Names : top4Names}${isAdmin ? '&deep=true' : ''}`),
       fetch(`/api/oracle?names=${oracleNames}`),
-      fetch('/api/analytics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assets: sorted }) })
+      fetch('/api/analytics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assets: sorted }) }),
+      fetch('/api/market-pulse')
     ]);
 
     let weather = { percent: 50, articleCount: 0 };
@@ -103,6 +104,7 @@ function App() {
     let oracleData = null;
     let projectionTimeline = [];
     let analyticsData = null;
+    let marketPulse = null;
 
     if (sentimentRes.status === 'fulfilled' && sentimentRes.value.ok) {
       const s = await sentimentRes.value.json();
@@ -124,7 +126,6 @@ function App() {
         return point;
       });
     } else {
-      // Always render baseline 4% chart even when oracle fails
       oracleData = { growthPercent: 4.0 };
       const months = ['Today', 'M+1', 'M+2', 'M+3', 'M+4', 'M+5', 'M+6'];
       let cur = total;
@@ -139,7 +140,11 @@ function App() {
       analyticsData = await analyticsRes.value.json();
     }
 
-    setDashboardData({ assets: assetData, netWorth: total, weather, oracleData, projectionTimeline, intelligenceData, analyticsData });
+    if (pulseRes.status === 'fulfilled' && pulseRes.value.ok) {
+      marketPulse = await pulseRes.value.json();
+    }
+
+    setDashboardData({ assets: assetData, netWorth: total, weather, oracleData, projectionTimeline, intelligenceData, analyticsData, marketPulse });
     setDashboardLoading(false);
   }, []);
 

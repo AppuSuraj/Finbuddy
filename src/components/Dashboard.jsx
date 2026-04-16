@@ -3,14 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { ArrowUpRight, Radar, Radio, Zap, BarChart2, ShieldCheck, FileUp, ArrowRight, TrendingUp, Activity, Lock, Newspaper, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 
-const MARKET_PULSE = [
-  { label: 'NIFTY 50', value: '24,315.85', change: '+0.68%', up: true },
-  { label: 'SENSEX', value: '80,116.49', change: '+0.64%', up: true },
-  { label: 'BANK NIFTY', value: '52,283.30', change: '+0.42%', up: true },
-  { label: 'GOLD (MCX)', value: '₹93,150', change: '+1.21%', up: true },
-  { label: 'USD/INR', value: '₹84.32', change: '-0.18%', up: false },
-];
-
 const FEATURES = [
   {
     icon: Radar,
@@ -59,8 +51,17 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
     );
   }
 
-  const { assets = [], netWorth = 0, weather = { percent: 50, articleCount: 0 }, oracleData, projectionTimeline = [], intelligenceData, analyticsData } = data;
+  const { assets = [], netWorth = 0, weather = { percent: 50, articleCount: 0 }, oracleData, projectionTimeline = [], intelligenceData, analyticsData, marketPulse } = data;
   
+  // ── Fallback for Market Pulse (Hardcoded data acts as safety if API fails) ──
+  const activePulse = marketPulse || [
+    { label: 'NIFTY 50', value: '24,315.85', change: '+0.68%', up: true },
+    { label: 'SENSEX', value: '80,116.49', change: '+0.64%', up: true },
+    { label: 'BANK NIFTY', value: '52,283.30', change: '+0.42%', up: true },
+    { label: 'GOLD (INDIA)', value: '₹1,55,360', change: '+0.00%', up: true },
+    { label: 'USD/INR', value: '₹84.32', change: '-0.18%', up: false },
+  ];
+
   // ── Broker Filtering Logic ──
   const filteredAssets = assets.filter(a => brokerFilter === 'All' || a.broker === brokerFilter);
   const hasAssets = filteredAssets.length > 0;
@@ -84,8 +85,8 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
 
       {/* ── Market Pulse Ticker ── */}
       <div style={{ display: 'flex', overflowX: 'auto', marginBottom: '28px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', scrollbarWidth: 'none' }}>
-        {MARKET_PULSE.map((m, i) => (
-          <div key={i} style={{ padding: '12px 24px', borderRight: i < MARKET_PULSE.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {activePulse.map((m, i) => (
+          <div key={i} style={{ padding: '12px 24px', borderRight: i < activePulse.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>
             <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', letterSpacing: '1px', textTransform: 'uppercase', margin: '0 0 3px' }}>{m.label}</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>{m.value}</span>
