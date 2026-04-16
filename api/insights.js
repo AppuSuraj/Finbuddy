@@ -84,18 +84,22 @@ async function fetchFeed(url) {
 }
 
 export default async function handler(req, res) {
-  const { symbol, name, sector } = req.query;
+  const { symbol, name } = req.query;
   if (!symbol) return res.status(400).json({ error: 'Symbol required' });
 
-  const rawName = name ? decodeURIComponent(name).split('(')[0].trim() : symbol.split('.')[0];
+  // Robust Symbol Handling: Ensure Yahoo Finance gets a suffix for Indian stocks
+  const ticker = symbol.toUpperCase();
+  const yahooSymbol = (ticker.includes('.') || ticker.length > 10) ? ticker : `${ticker}.NS`;
+  const rawName = name ? decodeURIComponent(name).split('(')[0].trim() : ticker.split('.')[0];
 
-  // Run fundamentals + price in parallel
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+
+  // Run fundamentals + price in parallel with the fixed symbol
   const [fundamentals, priceData] = await Promise.all([
-    fetchYahooFundamentals(symbol),
-    fetchYahooPrice(symbol),
+    fetchYahooFundamentals(yahooSymbol),
+    fetchYahooPrice(yahooSymbol),
   ]);
 
-  // Merge: v7 quote has fundamentals, v8 chart is price backup
   const companyFullName = fundamentals?.longName || priceData?.longName || rawName;
   const profile = {
     currentPrice: fundamentals?.currentPrice || priceData?.currentPrice,
@@ -112,14 +116,17 @@ export default async function handler(req, res) {
     dataSource: fundamentals ? 'Yahoo Finance' : priceData ? 'Yahoo Finance (price only)' : null,
   };
 
-  // Fetch news from 3 sources in parallel
-  // Broader search for private/unlisted companies (names without .NS or .BO)
-  const isListed = symbol.endsWith('.NS') || symbol.endsWith('.BO');
-  const querySuffix = isListed ? ' stock' : '';
+  // BROAD AND SMART NEWS SEARCH
+  // We use the first 3-4 words of the company name for the most relevant results
+  const searchName = companyFullName.replace(/Ltd\.?|Limited|Corp\.?|Corporation/gi, '').split(' ').slice(0, 3).join(' ').trim();
   
-  const [googleFeed, earningsFeed, etFeed] = await Promise.all([
+  // Broader search criteria: if it's a short symbol or unlisted, avoid "NSE stock" which filters too much
+  const isListed = yahooSymbol.endsWith('.NS') || yahooSymbol.endsWith('.BO');
+  const querySuffix = isListed && searchName.length < 15 ? ' stock news' : ' news';
+
+  const [googleFeed, recentFeed, etFeed] = await Promise.all([
     fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(`"${searchName}"${querySuffix}`)}&hl=en-IN&gl=IN&ceid=IN:en`),
-    fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(`"${searchName}" news`)}&hl=en-IN&gl=IN&ceid=IN:en`),
+    fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(searchName)}&hl=en-IN&gl=IN&ceid=IN:en`),
     fetchFeed(`https://economictimes.indiatimes.com/rsssearchresult.cms?query=${encodeURIComponent(searchName)}`),
   ]);
 
@@ -127,7 +134,7 @@ export default async function handler(req, res) {
   const news = [];
 
   const processItems = (items = [], sourceName) => {
-    (items || []).slice(0, 10).forEach(item => {
+    (items || []).slice(0, 12).forEach(item => {
       let title = item.title || '';
       let publisher = sourceName;
       if (title.includes(' - ')) {
@@ -136,27 +143,31 @@ export default async function handler(req, res) {
         if (last.length < 50) { publisher = parts.pop(); title = parts.join(' - '); }
       }
       title = title.trim();
-      if (!title || seen.has(title.slice(0, 40))) return;
-      seen.add(title.slice(0, 40));
+      // Deduplicate by title prefix
+      const titleSig = title.slice(0, 45).toLowerCase();
+      if (!title || seen.has(titleSig)) return;
+      seen.add(titleSig);
+
       const fullText = title + ' ' + (item.contentSnippet || '');
       const score = deepScore(fullText);
       const grade = score > 1 ? 'Positive' : score < -1 ? 'Negative' : 'Neutral';
       const publishTime = item.isoDate || item.pubDate || new Date().toISOString();
+      
       news.push({
         title, link: item.link || item.guid, publisher,
         providerPublishTime: publishTime,
         sentimentGrade: grade, deepSentimentGrade: grade,
-        contentSnippet: item.contentSnippet || 'Read the full article.',
+        contentSnippet: item.contentSnippet || 'Comprehensive financial update available.',
         baseScore: score, deepScore: score,
       });
     });
   };
 
   processItems(googleFeed?.items, 'Google News');
-  processItems(earningsFeed?.items, 'Recent News');
+  processItems(recentFeed?.items, 'Market Intelligence');
   processItems(etFeed?.items, 'Economic Times');
 
-  // Sort descending by date
+  // Ensure latest news is strictly first
   const sortedNews = news.sort((a, b) => new Date(b.providerPublishTime) - new Date(a.providerPublishTime));
 
   res.status(200).json({ profile, news: sortedNews.slice(0, 10) });
