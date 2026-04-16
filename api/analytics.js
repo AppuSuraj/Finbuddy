@@ -90,6 +90,9 @@ export default async function handler(req, res) {
     if (sentiment < 45) auditProps.cons.push('News Pressure: Recent market intelligence is "Bearish" on your largest holdings.');
     if (Object.keys(sectorWeights).length < 5) auditProps.cons.push('Contagion Risk: Portfolio is split across too few sectors; diversity is low.');
 
+    // Default Cons if empty
+    if (auditProps.cons.length === 0) auditProps.cons.push('Optimized Risk Profile: No significant sector or news-based risks detected at this time.');
+
     // Verdict Logic
     if (healthGrade.startsWith('A') && sentiment > 60) {
       auditProps.verdict = 'Your portfolio is in an elite "Growth State". Strong diversification is shielding you from risk while positive news sentiment provides a significant tailwind.';

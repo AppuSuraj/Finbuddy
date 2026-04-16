@@ -82,8 +82,7 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
   const greeting = hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening';
 
   return (
-    <div className="animate-in" style={{ maxWidth: '1400px' }}>
-
+    <>
       {/* ── Health Audit Modal ── */}
       {showAudit && analyticsData?.health?.audit && (
         <div 
@@ -147,6 +146,8 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
           </div>
         </div>
       )}
+
+      <div className="animate-in" style={{ maxWidth: '1400px' }}>
 
       {/* ── Market Pulse Ticker ── */}
       <div style={{ display: 'flex', overflowX: 'auto', marginBottom: '28px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', scrollbarWidth: 'none' }}>
@@ -478,5 +479,6 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
         </>
       )}
     </div>
+    </>
   );
 }
