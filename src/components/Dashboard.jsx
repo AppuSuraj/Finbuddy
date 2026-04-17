@@ -70,6 +70,7 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
   const currentNetWorth = filteredAssets.reduce((acc, a) => acc + Number(a.value || 0), 0);
   const totalBuyValue = filteredAssets.reduce((acc, a) => acc + (a.buy_price ? (Number(a.buy_price) * Number(a.quantity || 1)) : 0), 0);
   const pnl = totalBuyValue > 0 ? currentNetWorth - totalBuyValue : null;
+  const pnlPct = (pnl !== null && totalBuyValue > 0) ? (pnl / totalBuyValue) * 100 : 0;
   
   const sentimentColor = weather.percent > 65 ? '#2dd4bf' : weather.percent < 45 ? '#ef4444' : '#eab308';
 
@@ -213,7 +214,7 @@ export default function Dashboard({ session, data, loading, onRefresh, brokerFil
               { label: 'Total Portfolio Value', value: `₹${currentNetWorth.toLocaleString('en-IN')}`, sub: `${brokerFilter} Wealth Exposure`, color: brokerFilter === 'Zerodha' ? '#0ea5e9' : brokerFilter === 'Groww' ? '#10b981' : '#2dd4bf', icon: TrendingUp },
               { label: 'Total Assets', value: filteredAssets.length, sub: 'Holdings in Vault', color: '#0ea5e9', icon: BarChart2 },
               { label: 'Sector Coverage', value: [...new Set(filteredAssets.map(a => a.sector).filter(Boolean))].length, sub: 'Unique SEBI Sectors', color: '#8b5cf6', icon: Radar },
-              ...(pnl !== null ? [{ label: 'Unrealised P&L', value: `${pnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(pnl)).toLocaleString('en-IN')}`, sub: pnl >= 0 ? 'Net Gain' : 'Net Loss', color: pnl >= 0 ? '#10b981' : '#ef4444', icon: ArrowUpRight }] : []),
+              ...(pnl !== null ? [{ label: 'Unrealised P&L', value: `${pnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(pnl)).toLocaleString('en-IN')} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%)`, sub: pnl >= 0 ? 'Net Gain' : 'Net Loss', color: pnl >= 0 ? '#10b981' : '#ef4444', icon: ArrowUpRight }] : []),
             ].map((kpi, i) => (
               <div key={i} className="glass-panel" style={{ padding: '20px', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: -20, right: -20, width: '80px', height: '80px', borderRadius: '50%', background: kpi.color, opacity: 0.06 }} />

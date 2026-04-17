@@ -357,12 +357,16 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
 
   const getSectorColor = (sector) => {
     if (!sector || sector === 'Uncategorized' || sector === 'Unknown') return '#64748b';
+    
+    // Premium Oceanic Palette: Teals, Blues, Sea Greens, Indigos
+    const palette = ['#2dd4bf', '#0ea5e9', '#06b6d4', '#10b981', '#3b82f6', '#14b8a6', '#6366f1'];
+    
     let hash = 0;
     for (let i = 0; i < sector.length; i++) {
         hash = sector.charCodeAt(i) + ((hash << 5) - hash);
     }
-    const hue = Math.abs(hash % 360);
-    return `hsl(${hue}, 70%, 55%)`;
+    const index = Math.abs(hash % palette.length);
+    return palette[index];
   };
 
   const totalValue = filteredAndSortedAssets.reduce((acc, curr) => acc + Number(curr.value), 0);
@@ -572,10 +576,10 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <p style={{ fontWeight: 600, fontSize: '18px' }}>₹{Number(asset.value).toLocaleString('en-IN')}</p>
-                          {asset.buy_price ? (
-                            <p className={Number(asset.value) >= Number(asset.buy_price) ? "text-success text-sm" : "text-danger text-sm"}>
-                              {Number(asset.value) >= Number(asset.buy_price) ? '+' : ''}
-                              {(((Number(asset.value) - Number(asset.buy_price)) / Number(asset.buy_price)) * 100).toFixed(1)}% ({percentage}% of port)
+                          {asset.buy_price && asset.quantity ? (
+                            <p className={Number(asset.value) >= (Number(asset.buy_price) * Number(asset.quantity)) ? "text-success text-sm" : "text-danger text-sm"}>
+                              {Number(asset.value) >= (Number(asset.buy_price) * Number(asset.quantity)) ? '+' : ''}
+                              {(((Number(asset.value) - (Number(asset.buy_price) * Number(asset.quantity))) / (Number(asset.buy_price) * Number(asset.quantity))) * 100).toFixed(1)}% ({percentage}% of port)
                             </p>
                           ) : (
                             <p className="text-muted text-sm">{percentage}% of portfolio</p>
@@ -613,10 +617,10 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                           <td style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>{percentage}%</td>
                           <td style={{ padding: '12px 8px', textAlign: 'right' }}>
                             <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'block' }}>₹{Number(asset.value).toLocaleString('en-IN')}</span>
-                            {asset.buy_price && (
-                              <span style={{ fontSize: '12px' }} className={Number(asset.value) >= Number(asset.buy_price) ? "text-success" : "text-danger"}>
-                                {Number(asset.value) >= Number(asset.buy_price) ? '+' : ''}
-                                {(((Number(asset.value) - Number(asset.buy_price)) / Number(asset.buy_price)) * 100).toFixed(1)}% P&L
+                            {asset.buy_price && asset.quantity && (
+                              <span style={{ fontSize: '12px' }} className={Number(asset.value) >= (Number(asset.buy_price) * Number(asset.quantity)) ? "text-success" : "text-danger"}>
+                                {Number(asset.value) >= (Number(asset.buy_price) * Number(asset.quantity)) ? '+' : ''}
+                                {(((Number(asset.value) - (Number(asset.buy_price) * Number(asset.quantity))) / (Number(asset.buy_price) * Number(asset.quantity))) * 100).toFixed(1)}% P&L
                               </span>
                             )}
                           </td>
