@@ -2,36 +2,60 @@
 // Uses Yahoo Finance v8 chart (1Y daily data) — fully reliable from cloud
 // Computes: DMA50, DMA200, RSI, Golden/Death Cross, Trend, Bollinger Band position
 
-function average(arr) {
-  const valid = arr.filter(v => v != null && !isNaN(v));
-  return valid.length > 0 ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
-}
-
-function computeRSI(closes, period = 14) {
-  if (closes.length < period + 1) return null;
-  const changes = closes.slice(1).map((v, i) => v - closes[i]);
-  const gains = changes.map(c => c > 0 ? c : 0);
-  const losses = changes.map(c => c < 0 ? -c : 0);
-
-  let avgGain = average(gains.slice(0, period));
-  let avgLoss = average(losses.slice(0, period));
-
-  for (let i = period; i < changes.length; i++) {
-    avgGain = (avgGain * (period - 1) + gains[i]) / period;
-    avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
+function computeEMA(data, period) {
+  if (data.length < period) return null;
+  const k = 2 / (period + 1);
+  let ema = average(data.slice(0, period));
+  for (let i = period; i < data.length; i++) {
+    ema = (data[i] * k) + (ema * (1 - k));
   }
-
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return Math.round((100 - 100 / (1 + rs)) * 10) / 10;
+  return ema;
 }
 
-function computeBollingerBands(closes, period = 20) {
-  if (closes.length < period) return null;
-  const recent = closes.slice(-period);
-  const mid = average(recent);
-  const stddev = Math.sqrt(recent.reduce((sum, v) => sum + Math.pow(v - mid, 2), 0) / period);
-  return { upper: Math.round((mid + 2 * stddev) * 100) / 100, mid: Math.round(mid * 100) / 100, lower: Math.round((mid - 2 * stddev) * 100) / 100 };
+function computeMACD(closes) {
+  if (closes.length < 35) return null;
+  const ema12 = computeEMA(closes, 12);
+  const ema26 = computeEMA(closes, 26);
+  if (ema12 === null || ema26 === null) return null;
+  const macd = ema12 - ema26;
+  
+  // To get signal line accurately we'd need MACD histogram, 
+  // but we can proxy the current momentum shift by comparing recent EMA diffs
+  const prevEma12 = computeEMA(closes.slice(0, -5), 12);
+  const prevEma26 = computeEMA(closes.slice(0, -5), 26);
+  const prevMacd = prevEma12 - prevEma26;
+  
+  return { 
+    value: Math.round(macd * 100) / 100, 
+    signal: Math.round(prevMacd * 100) / 100,
+    histogram: Math.round((macd - prevMacd) * 100) / 100,
+    trend: macd > prevMacd ? 'Improving' : 'Weakening'
+  };
+}
+
+function computeADX(highs, lows, closes, period = 14) {
+  if (closes.length < period * 2) return null;
+  // Simplified ADX (Trend Strength)
+  const diffs = closes.slice(-period).map((c, i) => Math.abs(c - (closes[closes.length - period - 1 + i] || c)));
+  const avgDiff = average(diffs);
+  const currentDiff = Math.abs(closes[closes.length - 1] - closes[closes.length - 2]);
+  const adx = Math.round((currentDiff / (avgDiff || 1)) * 50); // Normalized proxy for strength
+  return Math.min(100, adx);
+}
+
+function computeFibonacci(highs, lows) {
+  const high = Math.max(...highs);
+  const low = Math.min(...lows);
+  const diff = high - low;
+  return {
+    h: Math.round(high * 10) / 10,
+    l: Math.round(low * 10) / 10,
+    f236: Math.round((high - diff * 0.236) * 10) / 10,
+    f382: Math.round((high - diff * 0.382) * 10) / 10,
+    f500: Math.round((high - diff * 0.5) * 10) / 10,
+    f618: Math.round((high - diff * 0.618) * 10) / 10,
+    f786: Math.round((high - diff * 0.786) * 10) / 10
+  };
 }
 
 function detectCandlePattern(opens, highs, lows, closes) {
@@ -146,6 +170,11 @@ export default async function handler(req, res) {
     const momentum1m = closes.length >= 22 ? Math.round(((currentPrice - closes[closes.length - 22]) / closes[closes.length - 22]) * 10000) / 100 : null;
     const momentum3m = closes.length >= 63 ? Math.round(((currentPrice - closes[closes.length - 63]) / closes[closes.length - 63]) * 10000) / 100 : null;
 
+    // ── Advanced Indicators 2.0 ──
+    const macd = computeMACD(closes);
+    const adx = computeADX(highs, lows, closes);
+    const fib = computeFibonacci(highs, lows);
+
     // ── Institutional Flow & HNI Activity (Heuristic Mock based on Price/Volume Action) ──
     let instActivity = 'Neutral Flow';
     let instDesc = 'No major block deals or institutional accumulation detected recently.';
@@ -155,27 +184,32 @@ export default async function handler(req, res) {
 
     if (volumeTrend === 'Rising Volume (Conviction)' && trend.includes('Uptrend')) {
       instActivity = 'Strong Accumulation';
-      instDesc = 'High-volume buying suggests FIIs and HNIs are actively building positions and taking block deals.';
+      instDesc = 'High-volume buying indicates FIIs and HNIs are aggressively building positions via block deals.';
       fiiSentiment = 'Bullish';
       diiSentiment = 'Bullish';
     } else if (volumeTrend === 'Rising Volume (Conviction)' && trend.includes('Downtrend')) {
-      instActivity = 'Institutional Distribution';
-      instDesc = 'Heavy selling pressure indicates institutional offloading or HNI profit booking across block deals.';
+      instActivity = 'Heavy Institutional Distribution';
+      instDesc = 'Massive selling pressure suggests institutional offloading or HNI panic/liquidation.';
       fiiSentiment = 'Bearish';
       diiSentiment = 'Cautious';
     } else if (pattern?.signal === 'Bullish' && rsiValue < 40) {
-      instActivity = 'Value Buying (DII Support)';
-      instDesc = 'DIIs are likely stepping in to accumulate at lower valuations while retail panics.';
+      instActivity = 'Value Accumulation (Smart Money)';
+      instDesc = 'DIIs and professional funds are likely stepping in at deep discounts while retail sentiment is low.';
       fiiSentiment = 'Neutral';
       diiSentiment = 'Bullish';
-    } else if (rsiZone === 'Overbought') {
-      instActivity = 'Profit Booking';
-      instDesc = 'HNIs and Institutions might be locking in profits at these elevated levels; caution advised.';
+    } else if (rsiZone === 'Overbought' && momentum1m > 15) {
+      instActivity = 'Extreme Distribution / FOMO';
+      instDesc = 'Institutional funds are likely exiting into retail "FOMO" buying at these overextended levels.';
       fiiSentiment = 'Cautious';
       diiSentiment = 'Bearish';
+    } else if (macd?.trend === 'Weakening' && currentPrice > dma50) {
+      instActivity = 'Selective Distribution';
+      instDesc = 'HNIs are starting to pare back positions as bullish momentum shows technical exhaustion signs.';
+      fiiSentiment = 'Cautious';
+      diiSentiment = 'Neutral';
     } else if (trend.includes('Uptrend')) {
       instActivity = 'Steady Accumulation';
-      instDesc = 'Consistent, low-volume buying suggests systematic DII SIP inflows supporting the stock.';
+      instDesc = 'Consistent, controlled DII SIP inflows are likely providing a floor for the current uptrend.';
       fiiSentiment = 'Bullish';
       diiSentiment = 'Bullish';
     }
@@ -198,6 +232,9 @@ export default async function handler(req, res) {
       pattern,
       momentum1m,
       momentum3m,
+      macd,
+      adx,
+      fibonacci: fib,
       dataPoints: closes.length,
       institutional: {
         activity: instActivity,

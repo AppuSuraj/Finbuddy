@@ -226,3 +226,39 @@ h1, h2, h3, h4, h5 {
   background: rgba(45, 212, 191, 0.2);
   border-radius: 10px;
 }
+
+/* Tooltip Styles */
+.tooltip-trigger {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip-text {
+  visibility: hidden;
+  width: 260px;
+  background-color: #081a1f;
+  color: #f0fdfa;
+  text-align: left;
+  border-radius: 12px;
+  padding: 14px;
+  position: absolute;
+  z-index: 1000;
+  bottom: 110%;
+  left: 0;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(45, 212, 191, 0.4);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  backdrop-filter: blur(12px);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  pointer-events: none;
+  transform: translateY(10px);
+}
+
+.tooltip-trigger:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+}
