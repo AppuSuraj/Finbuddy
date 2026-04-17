@@ -788,9 +788,6 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
           </div>
         </div>
       )}
-    </div>
-  );
-}
 
       {showDeepScrutiny && (
         <div 
@@ -916,6 +913,11 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const styles = {
   centerText: {
     position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center'
   },
