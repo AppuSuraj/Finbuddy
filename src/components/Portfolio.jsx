@@ -41,6 +41,20 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
     if (!rawName) return '';
     let name = String(rawName).toUpperCase().trim();
     
+    // Fuzzy check for common Indian large-cap abbreviations
+    if (name.includes('L&T') || name.includes('LARSEN')) return 'LT';
+    if (name.includes('SBI') || name.includes('STATE BANK')) return 'SBIN';
+    if (name.includes('HDFC BANK')) return 'HDFCBANK';
+    if (name.includes('ICICI')) return 'ICICIBANK';
+    if (name.includes('KOTAK')) return 'KOTAKBANK';
+    if (name.includes('RELIANCE')) return 'RELIANCE';
+    if (name.includes('TATA MOTORS')) return 'TATAMOTORS';
+    if (name.includes('TATA POWER')) return 'TATAPOWER';
+    if (name.includes('BHARTI') || name.includes('AIRTEL')) return 'BHARTIARTL';
+    if (name.includes('BAJAJ FINSERV')) return 'BAJAJFINSV';
+    if (name.includes('BAJAJ FINANCE')) return 'BAJFINANCE';
+    if (name.includes('ADANI ENT')) return 'ADANIENT';
+
     const mappings = { 
       'HDFC BANK': 'HDFCBANK', 'TATA POWER': 'TATAPOWER', 'KOTAK MAHINDRA BANK': 'KOTAKBANK', 
       'ICICI BANK': 'ICICIBANK', 'ADANI ENTERPRISES': 'ADANIENT', 'TATA MOTORS': 'TATAMOTORS',
@@ -49,11 +63,9 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
     };
     if (mappings[name]) return mappings[name];
     
-    // Handle Zerodha/Groww variations like RELIANCE-EQ or RELIANCE_EQ or RELIANCE.EQ
-    name = name.split('-')[0].split('_')[0].split('.')[0].trim();
-    
-    if (name.includes('(')) name = name.split('(')[0].trim();
-    return name.split(' ')[0].replace(/[^A-Z0-9&]/g, '');
+    // Fallback normalization
+    let clean = name.split('(')[0].split('-')[0].split('_')[0].split('.')[0].trim();
+    return clean.split(' ')[0].replace(/[^A-Z0-9&]/g, '');
   };
 
   const Sparkline = ({ name }) => {
@@ -659,22 +671,22 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
 
     {selectedAsset && (
         <div 
-          className="animate-in" 
           style={{ 
             position: 'fixed', inset: 0, zIndex: 100, 
             display: 'flex', alignItems: 'center', justifyContent: 'center', 
-            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(32px)', padding: '20px' 
+            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(32px)', padding: '20px',
+            opacity: 1, transition: 'opacity 0.2s ease'
           }}
           onClick={() => setSelectedAsset(null)}
         >
           <div 
+            className="animate-in vault-scroll glass-panel" 
             style={{ 
               width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', 
               padding: '40px', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', 
               border: '1px solid var(--accent-primary)', background: 'rgba(10, 25, 30, 0.98)'
             }}
             onClick={e => e.stopPropagation()}
-            className="vault-scroll glass-panel"
           >
              <div className="flex justify-between items-center" style={{ marginBottom: '24px' }}>
                 <h2 style={{ fontSize: '32px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -789,12 +801,16 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
 
       {showDeepScrutiny && (
         <div 
-          className="animate-in" 
-          style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(32px)', padding: '20px' }}
+          style={{ 
+            position: 'fixed', inset: 0, zIndex: 110, 
+            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(32px)', padding: '20px',
+            opacity: 1, transition: 'opacity 0.2s ease'
+          }}
           onClick={() => setShowDeepScrutiny(false)}
         >
           <div 
-            className="glass-panel" 
+            className="animate-in glass-panel" 
             style={{ width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', padding: '40px', background: 'rgba(10,25,30,1)', border: '1px solid var(--accent-primary)', position: 'relative' }}
             onClick={e => e.stopPropagation()}
           >
@@ -808,6 +824,18 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
             {deepScrutinyLoading ? (
                <div style={{ padding: '60px 0', textAlign: 'center' }}>
                  <p className="text-muted text-lg flex items-center justify-center gap-3"><RefreshCw size={24} className="spin-animation" /> Synchronizing with Indian Financial Terminals...</p>
+               </div>
+            ) : deepScrutinyData?.error ? (
+               <div style={{ padding: '60px 40px', textAlign: 'center', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '16px', border: '1px dashed rgba(239, 68, 68, 0.2)' }}>
+                  <ShieldCheck size={48} className="text-danger" style={{ marginBottom: '16px', opacity: 0.6 }} />
+                  <h3 style={{ color: '#ef4444', marginBottom: '8px' }}>Institutional Oracle Failure</h3>
+                  <p className="text-muted" style={{ maxWidth: '400px', margin: '0 auto 24px' }}>
+                    The oracle was unable to fetch sufficient historical data for this ticker. This usually happens for very new IPOs or assets with low exchange volume.
+                  </p>
+                  <div className="flex justify-center gap-4">
+                     <button className="btn btn-secondary" onClick={() => handleDeepScrutiny(selectedAsset)}>Retry Scrutiny</button>
+                     <button className="btn btn-primary" onClick={() => setShowDeepScrutiny(false)}>Dismiss</button>
+                  </div>
                </div>
             ) : deepScrutinyData ? (
                <div className="animate-in">
