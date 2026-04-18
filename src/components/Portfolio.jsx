@@ -59,12 +59,12 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
       'HDFC BANK': 'HDFCBANK', 'TATA POWER': 'TATAPOWER', 'KOTAK MAHINDRA BANK': 'KOTAKBANK', 
       'ICICI BANK': 'ICICIBANK', 'ADANI ENTERPRISES': 'ADANIENT', 'TATA MOTORS': 'TATAMOTORS',
       'RELIANCE INDUSTRIES': 'RELIANCE', 'BAJAJ FINANCE': 'BAJFINANCE', 'BAJAJ FINSERV': 'BAJAJFINSV',
-      'LARSEN & TOUBRO': 'LT', 'STATE BANK OF INDIA': 'SBIN', 'BHARTI AIRTEL': 'BHARTIARTL'
+      'LARSEN & TOUBRO': 'LT', 'LARSEN & TOUBRO LTD': 'LT', 'L&T': 'LT', 'STATE BANK OF INDIA': 'SBIN', 'BHARTI AIRTEL': 'BHARTIARTL'
     };
     if (mappings[name]) return mappings[name];
     
-    // Fallback normalization
-    let clean = name.split('(')[0].split('-')[0].split('_')[0].split('.')[0].trim();
+    // Fallback normalization (less aggressive splitting to preserve 'LTD.' etc for map check above)
+    let clean = name.split('(')[0].split('-')[0].split('_')[0].trim();
     return clean.split(' ')[0].replace(/[^A-Z0-9&]/g, '');
   };
 
@@ -328,6 +328,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
 
     setShowDeepScrutiny(true);
     const ticker = smartResolveTicker(asset.name);
+    console.log(`[INSTITUTIONAL] Attemping Deep Scrutiny for: ${asset.name} (Resolved Ticker: ${ticker})`);
     setDeepScrutinyData(null);
     setDeepScrutinyLoading(true);
     try {
@@ -680,7 +681,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
           onClick={() => setSelectedAsset(null)}
         >
           <div 
-            className="animate-in vault-scroll glass-panel" 
+            className="modal-animate-in vault-scroll glass-panel" 
             style={{ 
               width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', 
               padding: '40px', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', 
@@ -810,7 +811,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
           onClick={() => setShowDeepScrutiny(false)}
         >
           <div 
-            className="animate-in glass-panel" 
+            className="modal-animate-in glass-panel" 
             style={{ width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', padding: '40px', background: 'rgba(10,25,30,1)', border: '1px solid var(--accent-primary)', position: 'relative' }}
             onClick={e => e.stopPropagation()}
           >
@@ -830,7 +831,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                   <ShieldCheck size={48} className="text-danger" style={{ marginBottom: '16px', opacity: 0.6 }} />
                   <h3 style={{ color: '#ef4444', marginBottom: '8px' }}>Institutional Oracle Failure</h3>
                   <p className="text-muted" style={{ maxWidth: '400px', margin: '0 auto 24px' }}>
-                    The oracle was unable to fetch sufficient historical data for this ticker. This usually happens for very new IPOs or assets with low exchange volume.
+                    The oracle was unable to fetch sufficient historical data for the ticker <strong>{smartResolveTicker(selectedAsset.name)}</strong>. This usually happens for very new IPOs or assets with low exchange volume.
                   </p>
                   <div className="flex justify-center gap-4">
                      <button className="btn btn-secondary" onClick={() => handleDeepScrutiny(selectedAsset)}>Retry Scrutiny</button>
