@@ -85,19 +85,26 @@ export default async function handler(req, res) {
   if (!symbol) return res.status(400).json({ error: 'symbol required' });
 
   try {
-    // Fetch 1 year of daily OHLCV — Yahoo v8 chart is reliable from cloud
+    // Fetch 1 year of daily OHLCV — hardened fetch pattern
     const ctrl = new AbortController();
-    const id = setTimeout(() => ctrl.abort(), 8000);
+    const id = setTimeout(() => ctrl.abort(), 12000); // 12s timeout for deeper scans
+    
+    // Try primary Exchange (.NS) then fallback to (.BO) logic if needed
+    // However, the handler handles one symbol at a time.
     const r = await fetch(
       `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1y&interval=1d`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: ctrl.signal }
+      { signal: ctrl.signal }
     );
     clearTimeout(id);
 
-    if (!r.ok) return res.status(502).json({ error: 'data unavailable' });
+    if (!r.ok) {
+      if (r.status === 404) return res.status(200).json({ error: 'symbol_not_found' });
+      return res.status(200).json({ error: 'exchange_unreachable', status: r.status });
+    }
+    
     const d = await r.json();
     const result = d?.chart?.result?.[0];
-    if (!result) return res.status(502).json({ error: 'no data' });
+    if (!result) return res.status(200).json({ error: 'insufficient_history' });
 
     const meta = result.meta;
     const quotes = result.indicators?.quote?.[0] || {};

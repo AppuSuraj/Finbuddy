@@ -353,9 +353,17 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
     setFetchingInsights(true);
     setInsightsData(null);
     setDeepScrutinyData(null);
+    setDeepScrutinyLoading(true);
     setIsEditingSector(false);
     
     const ticker = smartResolveTicker(asset.name);
+
+    // Parallel fetch for Deep Technical Analysis (Integrated)
+    fetch(`/api/deep-scrutiny?symbol=${ticker}.NS`).then(r => r.ok ? r.json() : fetch(`/api/deep-scrutiny?symbol=${ticker}.BO`).then(r2 => r2.json()))
+      .then(data => {
+         setDeepScrutinyData(data);
+         setDeepScrutinyLoading(false);
+      }).catch(() => setDeepScrutinyLoading(false));
 
     try {
       const queryName = encodeURIComponent(asset.name);
@@ -696,9 +704,6 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     {!isEditingSector ? (
                         <div className="flex gap-2">
-                           <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => handleDeepScrutiny(selectedAsset)}>
-                              <ShieldCheck size={14} className="text-secondary" /> Deep Scrutiny
-                           </button>
                            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setIsEditingSector(true)}>
                               <Edit3 size={14} /> {selectedAsset.sector || 'Uncategorized'}
                            </button>
@@ -721,218 +726,138 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                  </div>
               </div>
              
-             {fetchingInsights ? (
-               <div style={{ padding: '60px 0', textAlign: 'center' }}>
-                 <p className="text-muted text-lg flex items-center justify-center gap-3"><RefreshCw size={24} className="spin-animation" /> Scraping Financial Terminals...</p>
-               </div>
-             ) : insightsData ? (
-               <div>
-                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
-                   {[
-                     { label: 'Current Price', value: insightsData.profile?.currentPrice ? `₹${Number(insightsData.profile.currentPrice).toLocaleString('en-IN')}` : null, accent: true },
-                     { label: 'Market Cap', value: insightsData.profile?.marketCap ? `₹${Number(insightsData.profile.marketCap).toLocaleString('en-IN')} Cr.` : null },
-                     { label: '52W High / Low', value: insightsData.profile?.high52w && insightsData.profile?.low52w ? `₹${Number(insightsData.profile.high52w).toLocaleString('en-IN')} / ₹${Number(insightsData.profile.low52w).toLocaleString('en-IN')}` : null },
-                     { label: 'Stock P/E', value: insightsData.profile?.pe ? Number(insightsData.profile.pe).toFixed(2) : null },
-                     { label: 'Book Value', value: insightsData.profile?.bookValue ? `₹${Number(insightsData.profile.bookValue).toLocaleString('en-IN')}` : null },
-                     { label: 'Dividend Yield', value: insightsData.profile?.dividendYield ? `${insightsData.profile.dividendYield} %` : null },
-                     { label: 'ROCE', value: insightsData.profile?.roce ? `${insightsData.profile.roce} %` : null },
-                     { label: 'ROE', value: insightsData.profile?.roe ? `${insightsData.profile.roe} %` : null },
-                   ].filter(x => x.value).map((item, idx) => (
-                     <div key={idx} style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                       <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginBottom: '4px' }}>{item.label}</p>
-                       <p style={{ fontSize: '17px', fontWeight: 600, color: item.accent ? 'var(--accent-primary)' : '#fff' }}>{item.value}</p>
-                     </div>
-                   ))}
-                 </div>
-                 {insightsData.profile?.dataSource && (
-                   <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', marginBottom: '24px', textAlign: 'right' }}>
-                     Data sourced from {insightsData.profile.dataSource}
-                   </p>
-                 )}
-
-                 <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Newspaper size={20} color="var(--accent-primary)" /> Latest Market Intelligence
-                 </h3>
-
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                   {insightsData.news && insightsData.news.length > 0 ? [...insightsData.news].sort((a, b) => new Date(b.providerPublishTime) - new Date(a.providerPublishTime)).map((item, idx) => {
-                     const isDeepScanned = deepScanStates[idx];
-                     const finalGrade = isDeepScanned ? item.deepSentimentGrade : item.sentimentGrade;
-                     return (
-                     <div key={idx} className="glass-panel" style={{ padding: '20px', display: 'block', background: 'rgba(0,0,0,0.1)', borderLeft: finalGrade === 'Positive' ? '4px solid #22c55e' : finalGrade === 'Negative' ? '4px solid #ef4444' : '4px solid #94a3b8' }}>
-                       <div className="flex justify-between items-start gap-4" style={{ marginBottom: '8px' }}>
-                         <a href={item.link} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
-                           <p className="font-semibold hover-text-primary transition-colors" style={{ fontSize: '17px', lineHeight: '1.4' }}>{item.title}</p>
-                         </a>
-                         <div className="flex gap-2 items-center">
-                           {!isDeepScanned && (
-                             <button onClick={() => setDeepScanStates(prev => ({...prev, [idx]: true}))} className="hover-scale" style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap' }}>
-                                🔬 Deep Scan
-                             </button>
-                           )}
-                           <span style={{ 
-                             padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap',
-                             background: finalGrade === 'Positive' ? 'rgba(34,197,94,0.1)' : finalGrade === 'Negative' ? 'rgba(239,68,68,0.1)' : 'rgba(148,163,184,0.1)',
-                             color: finalGrade === 'Positive' ? '#4ade80' : finalGrade === 'Negative' ? '#f87171' : '#cbd5e1'
-                           }}>
-                             {finalGrade === 'Positive' ? '🟢 Positive' : finalGrade === 'Negative' ? '🔴 Negative' : '⚪ Neutral'}
-                           </span>
-                         </div>
-                       </div>
-                       
-                       {isDeepScanned && (
-                          <div className="animate-in" style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', margin: '14px 0', border: '1px solid rgba(255,255,255,0.05)' }}>
-                            <p className="text-sm text-secondary" style={{ marginBottom: '8px', letterSpacing: '0.5px' }}><strong>DEEP NLP ANALYSIS:</strong></p>
-                            <p className="text-sm" style={{ lineHeight: '1.5', color: '#cbd5e1' }}>{item.contentSnippet}</p>
-                            <p className="text-xs text-muted" style={{ marginTop: '12px', fontVariantNumeric: 'tabular-nums' }}>
-                               Base Score: {item.baseScore} | Adjusted Heuristic Score: {item.deepScore}
-                            </p>
+              {/* ── UNIFIED INSTITUTIONAL INTELLIGENCE (Top Placement) ── */}
+              <div style={{ marginBottom: '32px' }}>
+                {deepScrutinyLoading ? (
+                   <div style={{ padding: '24px', textAlign: 'center', background: 'rgba(45, 212, 191, 0.03)', borderRadius: '16px', border: '1px dashed rgba(45, 212, 191, 0.15)' }}>
+                     <p className="text-muted text-sm flex items-center justify-center gap-3"><RefreshCw size={16} className="spin-animation" /> Synchronizing Institutional Technicals...</p>
+                   </div>
+                ) : deepScrutinyData?.error ? (
+                   <div style={{ padding: '24px', textAlign: 'center', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '16px', border: '1px dashed rgba(239, 68, 68, 0.2)' }}>
+                      <p style={{ color: '#f87171', fontSize: '14px', fontWeight: 600, margin: '0 0 4px' }}>Institutional Oracle Connectivity Warning</p>
+                      <p className="text-xs text-muted" style={{ margin: 0 }}>Limited historical data for {smartResolveTicker(selectedAsset.name)}. Fundamental analysis available below.</p>
+                   </div>
+                ) : deepScrutinyData ? (
+                   <div className="modal-animate-in" style={{ background: 'rgba(45, 212, 191, 0.04)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(45, 212, 191, 0.1)', boxShadow: 'inset 0 0 20px rgba(45, 212, 191, 0.05)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <h4 style={{ margin: 0, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <ShieldCheck size={16} /> Institutional Intelligence Sweep
+                        </h4>
+                        <span style={{ fontSize: '10px', background: 'rgba(45, 212, 191, 0.15)', color: 'var(--accent-primary)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Elite Tier Analysis</span>
+                      </div>
+                      
+                      {getScrutinySummary(deepScrutinyData) && (
+                        <div style={{ marginBottom: '24px' }}>
+                          <p style={{ fontSize: '16px', fontWeight: 600, color: '#fff', lineHeight: 1.6, margin: '0 0 16px' }}>{getScrutinySummary(deepScrutinyData).main}</p>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                             {getScrutinySummary(deepScrutinyData).tags.slice(0, 4).map((tag, i) => (
+                               <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                  <span style={{ color: 'var(--accent-primary)', marginTop: '4px' }}>•</span>
+                                  <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', margin: 0, lineHeight: 1.5 }}>{tag}</p>
+                               </div>
+                             ))}
                           </div>
-                       )}
+                        </div>
+                      )}
 
-                       <p className="text-xs text-muted mt-2">{item.publisher} • {getRelativeTime(item.providerPublishTime)}</p>
-                     </div>
-                   )}) : <p className="text-muted text-center" style={{ padding: '30px' }}>No recent news articles logged for this specific asset.</p>}
-                 </div>
-               </div>
-             ) : null}
-          </div>
-        </div>
-      )}
-
-      {showDeepScrutiny && (
-        <div 
-          style={{ 
-            position: 'fixed', inset: 0, zIndex: 110, 
-            display: 'flex', alignItems: 'center', justifyContent: 'center', 
-            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(32px)', padding: '20px',
-            opacity: 1, transition: 'opacity 0.2s ease'
-          }}
-          onClick={() => setShowDeepScrutiny(false)}
-        >
-          <div 
-            className="modal-animate-in glass-panel" 
-            style={{ width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', padding: '40px', background: 'rgba(10,25,30,1)', border: '1px solid var(--accent-primary)', position: 'relative' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-               <h2 style={{ margin: 0, fontSize: '28px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                 <ShieldCheck size={28} className="text-secondary" /> Institutional Deep Scrutiny 2.0
-               </h2>
-               <button onClick={() => setShowDeepScrutiny(false)} className="btn btn-secondary">Close</button>
-            </div>
-
-            {deepScrutinyLoading ? (
-               <div style={{ padding: '60px 0', textAlign: 'center' }}>
-                 <p className="text-muted text-lg flex items-center justify-center gap-3"><RefreshCw size={24} className="spin-animation" /> Synchronizing with Indian Financial Terminals...</p>
-               </div>
-            ) : deepScrutinyData?.error ? (
-               <div style={{ padding: '60px 40px', textAlign: 'center', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '16px', border: '1px dashed rgba(239, 68, 68, 0.2)' }}>
-                  <ShieldCheck size={48} className="text-danger" style={{ marginBottom: '16px', opacity: 0.6 }} />
-                  <h3 style={{ color: '#ef4444', marginBottom: '8px' }}>Institutional Oracle Failure</h3>
-                  <p className="text-muted" style={{ maxWidth: '400px', margin: '0 auto 24px' }}>
-                    The oracle was unable to fetch sufficient historical data for the ticker <strong>{smartResolveTicker(selectedAsset.name)}</strong>. This usually happens for very new IPOs or assets with low exchange volume.
-                  </p>
-                  <div className="flex justify-center gap-4">
-                     <button className="btn btn-secondary" onClick={() => handleDeepScrutiny(selectedAsset)}>Retry Scrutiny</button>
-                     <button className="btn btn-primary" onClick={() => setShowDeepScrutiny(false)}>Dismiss</button>
-                  </div>
-               </div>
-            ) : deepScrutinyData ? (
-               <div className="animate-in">
-                 <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>
-                    <div style={{ padding: '12px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', borderLeft: `4px solid ${deepScrutinyData.trend?.includes('Up') ? '#10b981' : '#ef4444'}` }}>
-                      <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 4px' }}>Market Stance</p>
-                      <p style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>{deepScrutinyData.trend}</p>
-                    </div>
-                    {deepScrutinyData.institutional && (
-                       <div style={{ padding: '12px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', flex: 1 }}>
-                         <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 4px' }}>Institutional Flow</p>
-                         <p style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--accent-primary)' }}>{deepScrutinyData.institutional.activity}</p>
-                       </div>
-                    )}
-                 </div>
-
-                 {/* ── Executive Summary ── */}
-                 {getScrutinySummary(deepScrutinyData) && (
-                   <div style={{ background: 'rgba(45,212,191,0.06)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(45,212,191,0.15)', marginBottom: '32px' }}>
-                      <p style={{ fontSize: '16px', fontWeight: 600, color: '#fff', lineHeight: 1.6, margin: '0 0 16px' }}>{getScrutinySummary(deepScrutinyData).main}</p>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                         {getScrutinySummary(deepScrutinyData).tags.map((tag, i) => (
-                           <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                              <span style={{ color: 'var(--accent-primary)', marginTop: '4px' }}>•</span>
-                              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', margin: 0, lineHeight: 1.5 }}>{tag}</p>
-                           </div>
-                         ))}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                         <div style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', margin: '0 0 4px', letterSpacing: '0.5px' }}>DMA Indicator</p>
+                            <p style={{ fontSize: '13px', fontWeight: 700, margin: 0 }}>50: <span style={{ color: deepScrutinyData.aboveDma50 ? '#10b981' : '#ef4444' }}>₹{deepScrutinyData.dma50?.toLocaleString('en-IN')}</span></p>
+                         </div>
+                         <div style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', margin: '0 0 4px', letterSpacing: '0.5px' }}>RSI (Oscillator)</p>
+                            <p style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--accent-primary)' }}>{deepScrutinyData.rsi || '50.0'}</p>
+                         </div>
+                         <div style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', margin: '0 0 4px', letterSpacing: '0.5px' }}>Trend Power</p>
+                            <p style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--accent-primary)' }}>{deepScrutinyData.adx > 25 ? 'Strong' : 'Sideways'}</p>
+                         </div>
+                         <div style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', margin: '0 0 4px', letterSpacing: '0.5px' }}>FII Sentiment</p>
+                            <p style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: deepScrutinyData.institutional?.fii === 'Bullish' ? '#10b981' : '#f59e0b' }}>{deepScrutinyData.institutional?.fii || 'Neutral'}</p>
+                         </div>
                       </div>
                    </div>
-                 )}
+                ) : null}
+              </div>
 
-                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '32px' }}>
-                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '20px', borderRadius: '14px' }}>
-                       <div className="tooltip-trigger" style={{ cursor: 'help' }}>
-                         <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 10px' }}>DMA Indicator</p>
-                         <span className="tooltip-text"><strong>DMA (Daily Moving Average)</strong>: Smooths price data to identify long-term trends over 50 and 200 days.</span>
-                       </div>
-                       <p style={{ fontSize: '14px', margin: '0 0 4px' }}>50: <strong style={{ color: deepScrutinyData.aboveDma50 ? '#10b981' : '#ef4444' }}>₹{deepScrutinyData.dma50?.toLocaleString('en-IN')}</strong></p>
-                       <p style={{ fontSize: '14px', margin: 0 }}>200: <strong style={{ color: deepScrutinyData.aboveDma200 ? '#10b981' : '#ef4444' }}>₹{deepScrutinyData.dma200?.toLocaleString('en-IN')}</strong></p>
-                    </div>
+              {fetchingInsights ? (
+                <div style={{ padding: '60px 0', textAlign: 'center' }}>
+                  <p className="text-muted text-lg flex items-center justify-center gap-3"><RefreshCw size={24} className="spin-animation" /> Scraping Financial Terminals...</p>
+                </div>
+              ) : insightsData ? (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                    {[
+                      { label: 'Current Price', value: insightsData.profile?.currentPrice ? `₹${Number(insightsData.profile.currentPrice).toLocaleString('en-IN')}` : null, accent: true },
+                      { label: 'Market Cap', value: insightsData.profile?.marketCap ? `₹${Number(insightsData.profile.marketCap).toLocaleString('en-IN')} Cr.` : null },
+                      { label: '52W High / Low', value: insightsData.profile?.high52w && insightsData.profile?.low52w ? `₹${Number(insightsData.profile.high52w).toLocaleString('en-IN')} / ₹${Number(insightsData.profile.low52w).toLocaleString('en-IN')}` : null },
+                      { label: 'Stock P/E', value: insightsData.profile?.pe ? Number(insightsData.profile.pe).toFixed(2) : null },
+                      { label: 'Book Value', value: insightsData.profile?.bookValue ? `₹${Number(insightsData.profile.bookValue).toLocaleString('en-IN')}` : null },
+                      { label: 'Dividend Yield', value: insightsData.profile?.dividendYield ? `${insightsData.profile.dividendYield} %` : null },
+                      { label: 'ROCE', value: insightsData.profile?.roce ? `${insightsData.profile.roce} %` : null },
+                      { label: 'ROE', value: insightsData.profile?.roe ? `${insightsData.profile.roe} %` : null },
+                    ].filter(x => x.value).map((item, idx) => (
+                      <div key={idx} style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginBottom: '4px' }}>{item.label}</p>
+                        <p style={{ fontSize: '17px', fontWeight: 600, color: item.accent ? 'var(--accent-primary)' : '#fff' }}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {insightsData.profile?.dataSource && (
+                    <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', marginBottom: '24px', textAlign: 'right' }}>
+                      Data sourced from {insightsData.profile.dataSource}
+                    </p>
+                  )}
 
-                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '20px', borderRadius: '14px' }}>
-                       <div className="tooltip-trigger" style={{ cursor: 'help' }}>
-                         <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 10px' }}>RSI (Oscillator)</p>
-                         <span className="tooltip-text"><strong>RSI (Relative Strength Index)</strong>: Measures speed and change of price. Above 70 is 'Overbought' (sell signal), below 30 is 'Oversold' (buy signal).</span>
-                       </div>
-                       <p style={{ fontSize: '24px', fontWeight: 700, margin: 0, color: 'var(--accent-primary)' }}>{deepScrutinyData.rsi}</p>
-                       <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', margin: '4px 0 0' }}>{deepScrutinyData.rsiZone} Profile</p>
-                    </div>
+                  <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                     <Newspaper size={20} color="var(--accent-primary)" /> Latest Market Intelligence
+                  </h3>
 
-                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '20px', borderRadius: '14px' }}>
-                       <div className="tooltip-trigger" style={{ cursor: 'help' }}>
-                         <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 10px' }}>MACD Momentum</p>
-                         <span className="tooltip-text"><strong>MACD</strong>: Shows the relationship between two moving averages. It identifies momentum shifts and potential buy/sell crossovers.</span>
-                       </div>
-                       <p style={{ fontSize: '24px', fontWeight: 700, margin: 0, color: deepScrutinyData.macd?.trend === 'Improving' ? '#10b981' : '#ef4444' }}>{deepScrutinyData.macd?.value}</p>
-                       <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', margin: '4px 0 0' }}>Trend: {deepScrutinyData.macd?.trend}</p>
-                    </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {insightsData.news && insightsData.news.length > 0 ? [...insightsData.news].sort((a, b) => new Date(b.providerPublishTime) - new Date(a.providerPublishTime)).map((item, idx) => {
+                      const isDeepScanned = deepScanStates[idx];
+                      const finalGrade = isDeepScanned ? item.deepSentimentGrade : item.sentimentGrade;
+                      return (
+                      <div key={idx} className="glass-panel" style={{ padding: '20px', display: 'block', background: 'rgba(0,0,0,0.1)', borderLeft: finalGrade === 'Positive' ? '4px solid #22c55e' : finalGrade === 'Negative' ? '4px solid #ef4444' : '4px solid #94a3b8' }}>
+                        <div className="flex justify-between items-start gap-4" style={{ marginBottom: '8px' }}>
+                          <a href={item.link} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
+                            <p className="font-semibold hover-text-primary transition-colors" style={{ fontSize: '17px', lineHeight: '1.4' }}>{item.title}</p>
+                          </a>
+                          <div className="flex gap-2 items-center">
+                            {!isDeepScanned && (
+                              <button onClick={() => setDeepScanStates(prev => ({...prev, [idx]: true}))} className="hover-scale" style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap' }}>
+                                 🔬 Deep Scan
+                              </button>
+                            )}
+                            <span style={{ 
+                              padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap',
+                              background: finalGrade === 'Positive' ? 'rgba(34,197,94,0.1)' : finalGrade === 'Negative' ? 'rgba(239,68,68,0.1)' : 'rgba(148,163,184,0.1)',
+                              color: finalGrade === 'Positive' ? '#4ade80' : finalGrade === 'Negative' ? '#f87171' : '#cbd5e1'
+                            }}>
+                              {finalGrade === 'Positive' ? '🟢 Positive' : finalGrade === 'Negative' ? '🔴 Negative' : '⚪ Neutral'}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {isDeepScanned && (
+                           <div className="animate-in" style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', margin: '14px 0', border: '1px solid rgba(255,255,255,0.05)' }}>
+                             <p className="text-sm text-secondary" style={{ marginBottom: '8px', letterSpacing: '0.5px' }}><strong>DEEP NLP ANALYSIS:</strong></p>
+                             <p className="text-sm" style={{ lineHeight: '1.5', color: '#cbd5e1' }}>{item.contentSnippet}</p>
+                             <p className="text-xs text-muted" style={{ marginTop: '12px', fontVariantNumeric: 'tabular-nums' }}>
+                                Base Score: {item.baseScore} | Adjusted Heuristic Score: {item.deepScore}
+                             </p>
+                           </div>
+                        )}
 
-                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '20px', borderRadius: '14px' }}>
-                       <div className="tooltip-trigger" style={{ cursor: 'help' }}>
-                         <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 10px' }}>Trend Strength (ADX)</p>
-                         <span className="tooltip-text"><strong>ADX (Average Directional Index)</strong>: Measures the overall strength of a trend. Below 25 is weak/sideways, above 50 is extremely strong.</span>
-                       </div>
-                       <p style={{ fontSize: '24px', fontWeight: 700, margin: 0, color: 'var(--accent-primary)' }}>{deepScrutinyData.adx}</p>
-                       <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', margin: '4px 0 0' }}>{deepScrutinyData.adx > 50 ? 'Dominant Trend' : 'Testing Strength'}</p>
-                    </div>
-                 </div>
-
-                 <div className="glass-panel" style={{ padding: '24px', background: 'rgba(0,0,0,0.2)' }}>
-                    <div className="tooltip-trigger" style={{ cursor: 'help', marginBottom: '16px' }}>
-                      <h4 style={{ margin: 0, fontSize: '14px' }}>Fibonacci Retracement Targets</h4>
-                      <span className="tooltip-text"><strong>Fibonacci Levels</strong>: Mathematical ratios used to find natural support (buying zones) and resistance (selling zones) based on the asset's range.</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px' }}>
-                       {[
-                         { label: '0.236', val: deepScrutinyData.fibonacci?.f236 },
-                         { label: '0.382', val: deepScrutinyData.fibonacci?.f382 },
-                         { label: '0.500', val: deepScrutinyData.fibonacci?.f500 },
-                         { label: '0.618', val: deepScrutinyData.fibonacci?.f618 },
-                         { label: '0.786', val: deepScrutinyData.fibonacci?.f786 },
-                       ].map((f, i) => (
-                         <div key={i} style={{ textAlign: 'center', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                           <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', margin: '0 0 6px' }}>{f.label}</p>
-                           <p style={{ fontSize: '13px', fontWeight: 700, margin: 0, color: 'var(--accent-primary)' }}>₹{f.val?.toLocaleString('en-IN')}</p>
-                         </div>
-                       ))}
-                    </div>
-                 </div>
-               </div>
-            ) : (
-               <div style={{ padding: '40px', textAlign: 'center' }}>
-                 <p className="text-muted">No technical data available for this symbol.</p>
-               </div>
-            )}
-          </div>
+                        <p className="text-xs text-muted mt-2">{item.publisher} • {getRelativeTime(item.providerPublishTime)}</p>
+                      </div>
+                    )}) : <p className="text-muted text-center" style={{ padding: '30px' }}>No recent news articles logged for this specific asset.</p>}
+                  </div>
+                </div>
+              ) : null}
+           </div>
         </div>
       )}
     </div>
