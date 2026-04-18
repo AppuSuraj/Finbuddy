@@ -17,6 +17,47 @@ function deepScore(text) {
   return score;
 }
 
+// ── NEW SCRAPER FOR INDIAN STOCK FUNDAMENTALS (RELIABLE FALLBACK) ──
+async function fetchScreenerFundamentals(ticker) {
+  try {
+    const cleanTicker = ticker.split('.')[0].replace(/[^A-Za-z0-9]/g, '');
+    const url = `https://www.screener.in/company/${cleanTicker}/`;
+    
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' },
+      signal: ctrl.signal
+    });
+    clearTimeout(id);
+    if (!r.ok) return null;
+    
+    const html = await r.text();
+    
+    const extract = (label) => {
+      // Find the label then capture the number in the next span.number
+      const regex = new RegExp(`${label}[\\s\\S]*?class="number">([^<]+)<`, 'i');
+      const match = html.match(regex);
+      if (!match) return null;
+      return match[1].replace(/,/g, '').trim();
+    };
+
+    return {
+      marketCap: extract('Market Cap') ? Math.round(parseFloat(extract('Market Cap'))) : null,
+      pe: extract('Stock P/E') ? parseFloat(extract('Stock P/E')) : null,
+      dividendYield: extract('Dividend Yield') ? parseFloat(extract('Dividend Yield')) : null,
+      roce: extract('ROCE') ? parseFloat(extract('ROCE')) : null,
+      roe: extract('ROE') ? parseFloat(extract('ROE')) : null,
+      bookValue: extract('Book Value') ? parseFloat(extract('Book Value')) : null,
+      faceValue: extract('Face Value') ? parseFloat(extract('Face Value')) : null,
+      dataSource: 'Institutional Screener (Fallback)'
+    };
+  } catch (e) {
+    console.error('[INSTITUTIONAL] Screener Scrape Error:', e.message);
+    return null;
+  }
+}
+
 // Yahoo Finance v7 quote — simpler, works from most cloud IPs
 // Returns: price, marketCap, PE, P/B, dividend yield, EPS, book value
 async function fetchYahooFundamentals(symbol) {
@@ -37,7 +78,11 @@ async function fetchYahooFundamentals(symbol) {
       const ctrl = new AbortController();
       const id = setTimeout(() => ctrl.abort(), 6000);
       const r = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json' },
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+          'Referer': 'https://finance.yahoo.com/'
+        },
         signal: ctrl.signal,
       });
       clearTimeout(id);
@@ -56,7 +101,7 @@ async function fetchYahooFundamentals(symbol) {
         high52w: q.fiftyTwoWeekHigh,
         low52w: q.fiftyTwoWeekLow,
         longName: q.longName || q.shortName,
-        faceValue: null, // Not available via Yahoo
+        faceValue: null,
         dataSource: 'Yahoo Finance',
       };
     } catch (e) { /* try next endpoint */ }
@@ -69,7 +114,7 @@ async function fetchYahooPrice(symbol) {
   try {
     const r = await fetch(
       `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1d&interval=1d`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+      { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' } }
     );
     if (!r.ok) return null;
     const d = await r.json();
@@ -89,40 +134,40 @@ export default async function handler(req, res) {
 
   // Robust Symbol Handling: Ensure Yahoo Finance gets a suffix for Indian stocks
   const ticker = symbol.toUpperCase();
+  const isIndian = ticker.endsWith('.NS') || ticker.endsWith('.BO') || ticker.length < 8;
   const yahooSymbol = (ticker.includes('.') || ticker.length > 10) ? ticker : `${ticker}.NS`;
   const rawName = name ? decodeURIComponent(name).split('(')[0].trim() : ticker.split('.')[0];
 
   res.setHeader('Cache-Control', 'no-store, max-age=0');
 
-  // Run fundamentals + price in parallel with the fixed symbol
-  const [fundamentals, priceData] = await Promise.all([
+  // Multi-Source Intelligence Fetch
+  const [yahooFundamentals, priceData, screenerData] = await Promise.all([
     fetchYahooFundamentals(yahooSymbol),
     fetchYahooPrice(yahooSymbol),
+    isIndian ? fetchScreenerFundamentals(yahooSymbol) : Promise.resolve(null)
   ]);
 
-  const companyFullName = fundamentals?.longName || priceData?.longName || rawName;
+  const companyFullName = yahooFundamentals?.longName || priceData?.longName || rawName;
+
+  // Merge Data (Prioritize Yahoo for Price/52W, Screener for Stats if Yahoo fails)
   const profile = {
-    currentPrice: fundamentals?.currentPrice || priceData?.currentPrice,
-    high52w: fundamentals?.high52w || priceData?.high52w,
-    low52w: fundamentals?.low52w || priceData?.low52w,
-    marketCap: fundamentals?.marketCap,
-    pe: fundamentals?.pe,
-    bookValue: fundamentals?.bookValue,
-    dividendYield: fundamentals?.dividendYield,
-    roe: fundamentals?.roe,
-    roce: fundamentals?.roce,
-    faceValue: fundamentals?.faceValue,
+    currentPrice: yahooFundamentals?.currentPrice || priceData?.currentPrice,
+    high52w: yahooFundamentals?.high52w || priceData?.high52w,
+    low52w: yahooFundamentals?.low52w || priceData?.low52w,
+    marketCap: yahooFundamentals?.marketCap || screenerData?.marketCap,
+    pe: yahooFundamentals?.pe || screenerData?.pe,
+    bookValue: yahooFundamentals?.bookValue || screenerData?.bookValue,
+    dividendYield: yahooFundamentals?.dividendYield || screenerData?.dividendYield,
+    roe: yahooFundamentals?.roe || screenerData?.roe,
+    roce: yahooFundamentals?.roce || screenerData?.roce,
+    faceValue: screenerData?.faceValue,
     companyName: companyFullName,
-    dataSource: fundamentals ? 'Yahoo Finance' : priceData ? 'Yahoo Finance (price only)' : null,
+    dataSource: yahooFundamentals ? 'Yahoo Finance' : screenerData ? 'Institutional Screener' : priceData ? 'Yahoo Finance (price only)' : null,
   };
 
   // BROAD AND SMART NEWS SEARCH
-  // We use the first 3-4 words of the company name for the most relevant results
   const searchName = companyFullName.replace(/Ltd\.?|Limited|Corp\.?|Corporation/gi, '').split(' ').slice(0, 3).join(' ').trim();
-  
-  // Broader search criteria: if it's a short symbol or unlisted, avoid "NSE stock" which filters too much
-  const isListed = yahooSymbol.endsWith('.NS') || yahooSymbol.endsWith('.BO');
-  const querySuffix = isListed && searchName.length < 15 ? ' stock news' : ' news';
+  const querySuffix = isIndian && searchName.length < 15 ? ' stock news' : ' news';
 
   const [googleFeed, recentFeed, etFeed] = await Promise.all([
     fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(`"${searchName}"${querySuffix}`)}&hl=en-IN&gl=IN&ceid=IN:en`),
@@ -143,7 +188,6 @@ export default async function handler(req, res) {
         if (last.length < 50) { publisher = parts.pop(); title = parts.join(' - '); }
       }
       title = title.trim();
-      // Deduplicate by title prefix
       const titleSig = title.slice(0, 45).toLowerCase();
       if (!title || seen.has(titleSig)) return;
       seen.add(titleSig);
@@ -167,7 +211,6 @@ export default async function handler(req, res) {
   processItems(recentFeed?.items, 'Market Intelligence');
   processItems(etFeed?.items, 'Economic Times');
 
-  // Ensure latest news is strictly first
   const sortedNews = news.sort((a, b) => new Date(b.providerPublishTime) - new Date(a.providerPublishTime));
 
   res.status(200).json({ profile, news: sortedNews.slice(0, 10) });
