@@ -410,6 +410,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
   }, [filteredAndSortedAssets, chartView]);
 
   return (
+    <>
     <div className="animate-in">
       <div className="page-header">
         <div>
@@ -656,13 +657,13 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
         </div>
       )}
 
-      {selectedAsset && (
+    {selectedAsset && (
         <div 
           className="animate-in" 
           style={{ 
-            position: 'fixed', inset: 0, zIndex: 50, 
+            position: 'fixed', inset: 0, zIndex: 100, 
             display: 'flex', alignItems: 'center', justifyContent: 'center', 
-            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(24px)', padding: '20px' 
+            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(32px)', padding: '20px' 
           }}
           onClick={() => setSelectedAsset(null)}
         >
@@ -670,7 +671,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
             style={{ 
               width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', 
               padding: '40px', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', 
-              border: '1px solid var(--accent-primary)', background: 'rgba(10, 25, 30, 0.95)'
+              border: '1px solid var(--accent-primary)', background: 'rgba(10, 25, 30, 0.98)'
             }}
             onClick={e => e.stopPropagation()}
             className="vault-scroll glass-panel"
@@ -723,13 +724,10 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                      { label: 'Dividend Yield', value: insightsData.profile?.dividendYield ? `${insightsData.profile.dividendYield} %` : null },
                      { label: 'ROCE', value: insightsData.profile?.roce ? `${insightsData.profile.roce} %` : null },
                      { label: 'ROE', value: insightsData.profile?.roe ? `${insightsData.profile.roe} %` : null },
-                     { label: 'Face Value', value: insightsData.profile?.faceValue ? `₹${insightsData.profile.faceValue}` : null },
-                   ].map((kpi, i) => (
-                     <div key={i} className="glass-panel" style={{ padding: '20px' }}>
-                       <p className="text-muted text-sm" style={{ marginBottom: '6px' }}>{kpi.label}</p>
-                       <p style={{ fontSize: '20px', fontWeight: 700, color: kpi.accent ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
-                         {kpi.value || <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '16px' }}>—</span>}
-                       </p>
+                   ].filter(x => x.value).map((item, idx) => (
+                     <div key={idx} style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                       <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginBottom: '4px' }}>{item.label}</p>
+                       <p style={{ fontSize: '17px', fontWeight: 600, color: item.accent ? 'var(--accent-primary)' : '#fff' }}>{item.value}</p>
                      </div>
                    ))}
                  </div>
@@ -792,12 +790,12 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
       {showDeepScrutiny && (
         <div 
           className="animate-in" 
-          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(32px)', padding: '20px' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(32px)', padding: '20px' }}
           onClick={() => setShowDeepScrutiny(false)}
         >
           <div 
             className="glass-panel" 
-            style={{ width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', padding: '40px', background: 'rgba(10,25,30,0.98)', border: '1px solid var(--accent-primary)' }}
+            style={{ width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', padding: '40px', background: 'rgba(10,25,30,1)', border: '1px solid var(--accent-primary)', position: 'relative' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -813,7 +811,6 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                </div>
             ) : deepScrutinyData ? (
                <div className="animate-in">
-                 {/* ── Status Header ── */}
                  <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>
                     <div style={{ padding: '12px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', borderLeft: `4px solid ${deepScrutinyData.trend?.includes('Up') ? '#10b981' : '#ef4444'}` }}>
                       <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 4px' }}>Market Stance</p>
@@ -828,21 +825,21 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                  </div>
 
                  {/* ── Executive Summary ── */}
-                 <div style={{ background: 'rgba(45,212,191,0.06)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(45,212,191,0.15)', marginBottom: '32px' }}>
-                    <p style={{ fontSize: '16px', fontWeight: 600, color: '#fff', lineHeight: 1.6, margin: '0 0 16px' }}>{getScrutinySummary(deepScrutinyData).main}</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                       {getScrutinySummary(deepScrutinyData).tags.map((tag, i) => (
-                         <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                            <span style={{ color: 'var(--accent-primary)', marginTop: '4px' }}>•</span>
-                            <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', margin: 0, lineHeight: 1.4 }}>{tag}</p>
-                         </div>
-                       ))}
-                    </div>
-                 </div>
+                 {getScrutinySummary(deepScrutinyData) && (
+                   <div style={{ background: 'rgba(45,212,191,0.06)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(45,212,191,0.15)', marginBottom: '32px' }}>
+                      <p style={{ fontSize: '16px', fontWeight: 600, color: '#fff', lineHeight: 1.6, margin: '0 0 16px' }}>{getScrutinySummary(deepScrutinyData).main}</p>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                         {getScrutinySummary(deepScrutinyData).tags.map((tag, i) => (
+                           <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                              <span style={{ color: 'var(--accent-primary)', marginTop: '4px' }}>•</span>
+                              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', margin: 0, lineHeight: 1.5 }}>{tag}</p>
+                           </div>
+                         ))}
+                      </div>
+                   </div>
+                 )}
 
-                 {/* ── Metric Grid ── */}
                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '32px' }}>
-                    {/* DMA Card */}
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '20px', borderRadius: '14px' }}>
                        <div className="tooltip-trigger" style={{ cursor: 'help' }}>
                          <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 10px' }}>DMA Indicator</p>
@@ -852,7 +849,6 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                        <p style={{ fontSize: '14px', margin: 0 }}>200: <strong style={{ color: deepScrutinyData.aboveDma200 ? '#10b981' : '#ef4444' }}>₹{deepScrutinyData.dma200?.toLocaleString('en-IN')}</strong></p>
                     </div>
 
-                    {/* RSI Card */}
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '20px', borderRadius: '14px' }}>
                        <div className="tooltip-trigger" style={{ cursor: 'help' }}>
                          <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 10px' }}>RSI (Oscillator)</p>
@@ -862,7 +858,6 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                        <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', margin: '4px 0 0' }}>{deepScrutinyData.rsiZone} Profile</p>
                     </div>
 
-                    {/* MACD Card */}
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '20px', borderRadius: '14px' }}>
                        <div className="tooltip-trigger" style={{ cursor: 'help' }}>
                          <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 10px' }}>MACD Momentum</p>
@@ -872,7 +867,6 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                        <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', margin: '4px 0 0' }}>Trend: {deepScrutinyData.macd?.trend}</p>
                     </div>
 
-                    {/* ADX Card */}
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '20px', borderRadius: '14px' }}>
                        <div className="tooltip-trigger" style={{ cursor: 'help' }}>
                          <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 10px' }}>Trend Strength (ADX)</p>
@@ -883,7 +877,6 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                     </div>
                  </div>
 
-                 {/* ── Fibonacci Retracement ── */}
                  <div className="glass-panel" style={{ padding: '24px', background: 'rgba(0,0,0,0.2)' }}>
                     <div className="tooltip-trigger" style={{ cursor: 'help', marginBottom: '16px' }}>
                       <h4 style={{ margin: 0, fontSize: '14px' }}>Fibonacci Retracement Targets</h4>
@@ -918,6 +911,14 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
 }
 
 const styles = {
+  input: {
+    width: '100%', padding: '8px 12px', borderRadius: '8px', 
+    background: 'var(--bg-color)', border: '1px solid var(--card-border)', 
+    color: '#fff', outline: 'none', fontFamily: 'inherit', fontSize: '14px'
+  },
+  grid: {
+    display: 'grid', gridTemplateColumns: 'minmax(400px, 1fr) 1.2fr', gap: '30px', alignItems: 'start'
+  },
   centerText: {
     position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center'
   },
