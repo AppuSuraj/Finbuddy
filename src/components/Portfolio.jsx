@@ -732,38 +732,60 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                    <div style={{ padding: '24px', textAlign: 'center', background: 'rgba(45, 212, 191, 0.03)', borderRadius: '16px', border: '1px dashed rgba(45, 212, 191, 0.15)' }}>
                      <p className="text-muted text-sm flex items-center justify-center gap-3"><RefreshCw size={16} className="spin-animation" /> Synchronizing Institutional Technicals...</p>
                    </div>
-                ) : deepScrutinyData?.error ? (
-                   <div style={{ padding: '24px', textAlign: 'center', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '16px', border: '1px dashed rgba(239, 68, 68, 0.2)' }}>
-                      <p style={{ color: '#f87171', fontSize: '14px', fontWeight: 600, margin: '0 0 4px' }}>Institutional Oracle Connectivity Warning</p>
-                      <p className="text-xs text-muted" style={{ margin: 0 }}>Limited historical data for {smartResolveTicker(selectedAsset.name)}. Fundamental analysis available below.</p>
-                   </div>
                 ) : deepScrutinyData ? (
                    <div className="modal-animate-in" style={{ background: 'rgba(45, 212, 191, 0.04)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(45, 212, 191, 0.1)', boxShadow: 'inset 0 0 20px rgba(45, 212, 191, 0.05)' }}>
+                      
+                      {/* Sub-Header / Connectivity Logic */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <h4 style={{ margin: 0, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <ShieldCheck size={16} /> Institutional Intelligence Sweep
                         </h4>
-                        <span style={{ fontSize: '10px', background: 'rgba(45, 212, 191, 0.15)', color: 'var(--accent-primary)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Elite Tier Analysis</span>
+                        <div className="flex gap-2">
+                          {deepScrutinyData.warning && (
+                             <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, border: '1px solid rgba(245, 158, 11, 0.2)' }}>Technical Warning</span>
+                          )}
+                          <span style={{ fontSize: '10px', background: 'rgba(45, 212, 191, 0.15)', color: 'var(--accent-primary)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Elite Tier Analysis</span>
+                        </div>
                       </div>
-                      
-                      {getScrutinySummary(deepScrutinyData) && (
+
+                      {/* Hard Error Banner (Only if NO data exists at all) */}
+                      {deepScrutinyData.error && !deepScrutinyData.institutional && (
+                         <div style={{ padding: '12px', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '8px', border: '1px dashed rgba(239, 68, 68, 0.2)', marginBottom: '16px' }}>
+                            <p className="text-xs" style={{ color: '#f87171', margin: 0 }}>Institutional Oracle Connectivity Warning: {deepScrutinyData.error}</p>
+                         </div>
+                      )}
+
+                      {/* Main Analysis Text */}
+                      {(deepScrutinyData.institutional || deepScrutinyData.trend) && (
                         <div style={{ marginBottom: '24px' }}>
-                          <p style={{ fontSize: '16px', fontWeight: 600, color: '#fff', lineHeight: 1.6, margin: '0 0 16px' }}>{getScrutinySummary(deepScrutinyData).main}</p>
+                          <p style={{ fontSize: '16px', fontWeight: 600, color: '#fff', lineHeight: 1.6, margin: '0 0 16px' }}>
+                            {getScrutinySummary(deepScrutinyData)?.main || deepScrutinyData.institutional?.status || deepScrutinyData.trend || "Data Sync Pending..."}
+                          </p>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                             {getScrutinySummary(deepScrutinyData).tags.slice(0, 4).map((tag, i) => (
+                             {getScrutinySummary(deepScrutinyData)?.tags?.slice(0, 4).map((tag, i) => (
                                <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                                   <span style={{ color: 'var(--accent-primary)', marginTop: '4px' }}>•</span>
                                   <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', margin: 0, lineHeight: 1.5 }}>{tag}</p>
                                </div>
-                             ))}
+                             )) || (
+                               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                  <span style={{ color: 'var(--accent-primary)', marginTop: '4px' }}>•</span>
+                                  <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', margin: 0, lineHeight: 1.5 }}>{deepScrutinyData.institutional?.description || "Analyzing fundamental structure and institutional flow..."}</p>
+                               </div>
+                             )}
                           </div>
                         </div>
                       )}
 
+                      {/* Metrics Grid */}
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
                          <div style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
                             <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', margin: '0 0 4px', letterSpacing: '0.5px' }}>DMA Indicator</p>
-                            <p style={{ fontSize: '13px', fontWeight: 700, margin: 0 }}>50: <span style={{ color: deepScrutinyData.aboveDma50 ? '#10b981' : '#ef4444' }}>₹{deepScrutinyData.dma50?.toLocaleString('en-IN')}</span></p>
+                            <p style={{ fontSize: '13px', fontWeight: 700, margin: 0 }}>
+                              {deepScrutinyData.dma50 ? (
+                                <>50: <span style={{ color: deepScrutinyData.currentPrice > deepScrutinyData.dma50 ? '#10b981' : '#ef4444' }}>₹{deepScrutinyData.dma50?.toLocaleString('en-IN')}</span></>
+                              ) : "SCANNING..."}
+                            </p>
                          </div>
                          <div style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
                             <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', margin: '0 0 4px', letterSpacing: '0.5px' }}>RSI (Oscillator)</p>
@@ -771,13 +793,20 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                          </div>
                          <div style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
                             <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', margin: '0 0 4px', letterSpacing: '0.5px' }}>Trend Power</p>
-                            <p style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--accent-primary)' }}>{deepScrutinyData.adx > 25 ? 'Strong' : 'Sideways'}</p>
+                            <p style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--accent-primary)' }}>{deepScrutinyData.trend?.includes('Uptrend') || deepScrutinyData.institutional?.status?.includes('Bullish') ? 'Strong' : 'Sideways'}</p>
                          </div>
                          <div style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
                             <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', margin: '0 0 4px', letterSpacing: '0.5px' }}>FII Sentiment</p>
-                            <p style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: deepScrutinyData.institutional?.fii === 'Bullish' ? '#10b981' : '#f59e0b' }}>{deepScrutinyData.institutional?.fii || 'Neutral'}</p>
+                            <p style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: deepScrutinyData.institutional?.fii === 'Bullish' || deepScrutinyData.institutional?.fii === 'Optimistic' ? '#10b981' : '#f59e0b' }}>{deepScrutinyData.institutional?.fii || 'Neutral'}</p>
                          </div>
                       </div>
+
+                      {/* Connectivity Note */}
+                      {deepScrutinyData.warning && (
+                         <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                            <p className="text-xs text-muted" style={{ margin: 0, opacity: 0.6 }}>ℹ️ {deepScrutinyData.warning}</p>
+                         </div>
+                      )}
                    </div>
                 ) : null}
               </div>

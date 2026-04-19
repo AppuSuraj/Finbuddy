@@ -70,9 +70,10 @@ async function fetchScreenerIntelligence(ticker) {
     return {
       activity: sentiment === 'Bullish' ? 'Steady Accumulation' : 'Neutral Flow',
       description: 'Institutional stance derived from fundamental peer analysis and balance sheet strength.',
+      status: sentiment === 'Bullish' ? 'Powerful Bullish Cycle' : 'Consolidation Phase',
       fii: sentiment === 'Bullish' ? 'Optimistic' : 'Neutral',
       dii: 'Bullish',
-      fallback: true
+      isFallback: true
     };
   } catch { return null; }
 }
@@ -106,21 +107,19 @@ export default async function handler(req, res) {
   }
 
   const ticker = symbol.toUpperCase();
-  // 1. Try v10 with .NS
+  // Attempt fetches
   let result = await tryYahoo(`https://query1.finance.yahoo.com/v10/finance/chart/${ticker}?range=1y&interval=1d`);
-  // 2. Try v8 with .NS
   if (!result) result = await tryYahoo(`https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?range=1y&interval=1d`);
-  // 3. Try v8 without .NS if it fails (some global tickers)
   if (!result && ticker.includes('.')) result = await tryYahoo(`https://query1.finance.yahoo.com/v10/finance/chart/${ticker.split('.')[0]}?range=1y&interval=1d`);
 
   if (!result) {
     // ── FALLBACK TO SCREENER INTELLIGENCE ──
     const intel = await fetchScreenerIntelligence(ticker);
-    if (!intel) return res.status(200).json({ error: 'exchange_unreachable', status: 403 });
+    if (!intel) return res.status(200).json({ error: 'Data source exhausted. Please try again in 1 hour.', status: 403 });
     return res.status(200).json({ 
        institutional: intel, 
-       error: 'insufficient_history',
-       note: 'Yahoo charts blocked. Fundamental intelligence active.' 
+       warning: 'Historical technical data currently restricted. Running fundamental intelligence failover.',
+       trend: intel.status
     });
   }
 
@@ -128,7 +127,14 @@ export default async function handler(req, res) {
   const closes = (quotes.close || []).filter(v => v != null);
   const currentPrice = result.meta.regularMarketPrice;
 
-  if (closes.length < 5) return res.status(200).json({ error: 'insufficient_history' });
+  if (closes.length < 5) {
+    const intel = await fetchScreenerIntelligence(ticker);
+    return res.status(200).json({ 
+       institutional: intel, 
+       warning: 'Insufficient price history for technical oscillators. Using fundamental flow analysis.',
+       trend: intel?.status || 'Active Analysis'
+    });
+  }
 
   // Indicators
   const dma50 = closes.length >= 50 ? Math.round(average(closes.slice(-50)) * 100) / 100 : null;
