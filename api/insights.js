@@ -17,7 +17,7 @@ function deepScore(text) {
   return score;
 }
 
-// ── NEW SCRAPER FOR INDIAN STOCK FUNDAMENTALS (RELIABLE FALLBACK) ──
+// ── SURGICAL SCRAPER FOR INDIAN STOCK FUNDAMENTALS ──
 async function fetchScreenerFundamentals(ticker) {
   try {
     const cleanTicker = ticker.split('.')[0].replace(/[^A-Za-z0-9]/g, '');
@@ -26,7 +26,7 @@ async function fetchScreenerFundamentals(ticker) {
     const ctrl = new AbortController();
     const id = setTimeout(() => ctrl.abort(), 8000);
     const r = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' },
       signal: ctrl.signal
     });
     clearTimeout(id);
@@ -34,22 +34,24 @@ async function fetchScreenerFundamentals(ticker) {
     
     const html = await r.text();
     
-    const extract = (label) => {
-      // Find the label then capture the number in the next span.number
-      const regex = new RegExp(`${label}[\\s\\S]*?class="number">([^<]+)<`, 'i');
+    // Surgical extraction: Look for the specific <li> structure in the core metrics table
+    // This prevents matching meta tags or 'Pros/Cons' text
+    const surgicalExtract = (label) => {
+      // Structure: <span class="name">Label</span> <span class="value"> <span class="number">Value</span>
+      const regex = new RegExp(`<span[^>]*class="name"[^>]*>\\s*${label}\\s*<\\/span>\\s*<span[^>]*class="nowrap value"[^>]*>(?:[^<]*|<span[^>]*>)*?<span[^>]*class="number"[^>]*>([^<]+)<\\/span>`, 'i');
       const match = html.match(regex);
       if (!match) return null;
       return match[1].replace(/,/g, '').trim();
     };
 
     return {
-      marketCap: extract('Market Cap') ? Math.round(parseFloat(extract('Market Cap'))) : null,
-      pe: extract('Stock P/E') ? parseFloat(extract('Stock P/E')) : null,
-      dividendYield: extract('Dividend Yield') ? parseFloat(extract('Dividend Yield')) : null,
-      roce: extract('ROCE') ? parseFloat(extract('ROCE')) : null,
-      roe: extract('ROE') ? parseFloat(extract('ROE')) : null,
-      bookValue: extract('Book Value') ? parseFloat(extract('Book Value')) : null,
-      faceValue: extract('Face Value') ? parseFloat(extract('Face Value')) : null,
+      marketCap: surgicalExtract('Market Cap') ? Math.round(parseFloat(surgicalExtract('Market Cap'))) : null,
+      pe: surgicalExtract('Stock P/E') ? parseFloat(surgicalExtract('Stock P/E')) : null,
+      dividendYield: surgicalExtract('Dividend Yield') ? parseFloat(surgicalExtract('Dividend Yield')) : null,
+      roce: surgicalExtract('ROCE') ? parseFloat(surgicalExtract('ROCE')) : null,
+      roe: surgicalExtract('ROE') ? parseFloat(surgicalExtract('ROE')) : null,
+      bookValue: surgicalExtract('Book Value') ? parseFloat(surgicalExtract('Book Value')) : null,
+      faceValue: surgicalExtract('Face Value') ? parseFloat(surgicalExtract('Face Value')) : null,
       dataSource: 'Institutional Screener (Fallback)'
     };
   } catch (e) {
@@ -58,8 +60,7 @@ async function fetchScreenerFundamentals(ticker) {
   }
 }
 
-// Yahoo Finance v7 quote — simpler, works from most cloud IPs
-// Returns: price, marketCap, PE, P/B, dividend yield, EPS, book value
+// Yahoo Finance v7 quote — uses improved headers and fallback
 async function fetchYahooFundamentals(symbol) {
   const fields = [
     'regularMarketPrice', 'marketCap', 'trailingPE', 'forwardPE',
@@ -80,8 +81,9 @@ async function fetchYahooFundamentals(symbol) {
       const r = await fetch(url, {
         headers: { 
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-          'Accept': 'application/json',
-          'Referer': 'https://finance.yahoo.com/'
+          'Accept': 'application/json, text/plain, */*',
+          'Referer': 'https://finance.yahoo.com/',
+          'Origin': 'https://finance.yahoo.com'
         },
         signal: ctrl.signal,
       });
@@ -109,19 +111,33 @@ async function fetchYahooFundamentals(symbol) {
   return null;
 }
 
-// Yahoo Finance v8 chart — always works, for price + 52W range
+// Yahoo Finance v10 chart
 async function fetchYahooPrice(symbol) {
-  try {
-    const r = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1d&interval=1d`,
-      { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' } }
-    );
-    if (!r.ok) return null;
-    const d = await r.json();
-    const meta = d?.chart?.result?.[0]?.meta;
-    if (!meta?.regularMarketPrice) return null;
-    return { currentPrice: meta.regularMarketPrice, high52w: meta.fiftyTwoWeekHigh, low52w: meta.fiftyTwoWeekLow, longName: meta.longName || meta.shortName };
-  } catch (e) { return null; }
+  const tryFetch = async (domain) => {
+    try {
+      const r = await fetch(
+        `https://${domain}/v10/finance/chart/${symbol}?range=1d&interval=1d`,
+        { headers: { 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Referer': 'https://finance.yahoo.com/'
+          } 
+        }
+      );
+      if (!r.ok) return null;
+      const d = await r.json();
+      const meta = d?.chart?.result?.[0]?.meta;
+      if (!meta?.regularMarketPrice) return null;
+      return { 
+        currentPrice: meta.regularMarketPrice, 
+        high52w: meta.fiftyTwoWeekHigh, 
+        low52w: meta.fiftyTwoWeekLow, 
+        longName: meta.longName || meta.shortName 
+      };
+    } catch (e) { return null; }
+  };
+
+  return (await tryFetch('query1.finance.yahoo.com')) || (await tryFetch('query2.finance.yahoo.com'));
 }
 
 async function fetchFeed(url) {
@@ -132,7 +148,6 @@ export default async function handler(req, res) {
   const { symbol, name } = req.query;
   if (!symbol) return res.status(400).json({ error: 'Symbol required' });
 
-  // Robust Symbol Handling: Ensure Yahoo Finance gets a suffix for Indian stocks
   const ticker = symbol.toUpperCase();
   const isIndian = ticker.endsWith('.NS') || ticker.endsWith('.BO') || ticker.length < 8;
   const yahooSymbol = (ticker.includes('.') || ticker.length > 10) ? ticker : `${ticker}.NS`;
@@ -140,7 +155,7 @@ export default async function handler(req, res) {
 
   res.setHeader('Cache-Control', 'no-store, max-age=0');
 
-  // Multi-Source Intelligence Fetch
+  // Parallel fetch from Yahoo and Screener
   const [yahooFundamentals, priceData, screenerData] = await Promise.all([
     fetchYahooFundamentals(yahooSymbol),
     fetchYahooPrice(yahooSymbol),
@@ -149,7 +164,7 @@ export default async function handler(req, res) {
 
   const companyFullName = yahooFundamentals?.longName || priceData?.longName || rawName;
 
-  // Merge Data (Prioritize Yahoo for Price/52W, Screener for Stats if Yahoo fails)
+  // Selective Data Merging: Market Cap and P/E are prioritized from Yahoo, but fell back to Screener
   const profile = {
     currentPrice: yahooFundamentals?.currentPrice || priceData?.currentPrice,
     high52w: yahooFundamentals?.high52w || priceData?.high52w,
@@ -165,7 +180,7 @@ export default async function handler(req, res) {
     dataSource: yahooFundamentals ? 'Yahoo Finance' : screenerData ? 'Institutional Screener' : priceData ? 'Yahoo Finance (price only)' : null,
   };
 
-  // BROAD AND SMART NEWS SEARCH
+  // News Search
   const searchName = companyFullName.replace(/Ltd\.?|Limited|Corp\.?|Corporation/gi, '').split(' ').slice(0, 3).join(' ').trim();
   const querySuffix = isIndian && searchName.length < 15 ? ' stock news' : ' news';
 

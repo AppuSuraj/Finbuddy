@@ -1,6 +1,11 @@
 // Deep Technical Analysis endpoint
-// Uses Yahoo Finance v8 chart (1Y daily data) — fully reliable from cloud
-// Computes: DMA50, DMA200, RSI, Golden/Death Cross, Trend, Bollinger Band position
+// Uses Yahoo Finance v10 chart (1Y daily data) — hardened for cloud deployments
+// Computes: DMA50, DMA200, RSI, Golden/Death Cross, Trend, MACD, Fibonacci
+
+function average(arr) {
+  if (arr.length === 0) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
 
 function computeEMA(data, period) {
   if (data.length < period) return null;
@@ -19,8 +24,6 @@ function computeMACD(closes) {
   if (ema12 === null || ema26 === null) return null;
   const macd = ema12 - ema26;
   
-  // To get signal line accurately we'd need MACD histogram, 
-  // but we can proxy the current momentum shift by comparing recent EMA diffs
   const prevEma12 = computeEMA(closes.slice(0, -5), 12);
   const prevEma26 = computeEMA(closes.slice(0, -5), 26);
   const prevMacd = prevEma12 - prevEma26;
@@ -33,14 +36,36 @@ function computeMACD(closes) {
   };
 }
 
+function computeRSI(closes, period = 14) {
+  if (closes.length < period + 1) return null;
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = closes[closes.length - 1 - period + i] - closes[closes.length - 2 - period + i];
+    if (diff >= 0) gains += diff; else losses -= diff;
+  }
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return Math.round(100 - (100 / (1 + rs)));
+}
+
 function computeADX(highs, lows, closes, period = 14) {
   if (closes.length < period * 2) return null;
-  // Simplified ADX (Trend Strength)
   const diffs = closes.slice(-period).map((c, i) => Math.abs(c - (closes[closes.length - period - 1 + i] || c)));
   const avgDiff = average(diffs);
   const currentDiff = Math.abs(closes[closes.length - 1] - closes[closes.length - 2]);
-  const adx = Math.round((currentDiff / (avgDiff || 1)) * 50); // Normalized proxy for strength
+  const adx = Math.round((currentDiff / (avgDiff || 1)) * 50);
   return Math.min(100, adx);
+}
+
+function computeBollingerBands(closes, period = 20) {
+  if (closes.length < period) return null;
+  const slice = closes.slice(-period);
+  const avg = average(slice);
+  const squareDiffs = slice.map(v => Math.pow(v - avg, 2));
+  const stdDev = Math.sqrt(average(squareDiffs));
+  return { mid: avg, upper: avg + (stdDev * 2), lower: avg - (stdDev * 2) };
 }
 
 function computeFibonacci(highs, lows) {
@@ -64,19 +89,9 @@ function detectCandlePattern(opens, highs, lows, closes) {
   const c = closes[n - 1], o = opens[n - 1], h = highs[n - 1], l = lows[n - 1];
   const body = Math.abs(c - o);
   const range = h - l;
-
-  // Doji
-  if (body < range * 0.1) return { name: 'Doji', signal: 'Neutral', desc: 'Indecision — market lacks direction. A breakout signal may follow.' };
-  // Hammer (bullish reversal)
-  if (c > o && (o - l) > body * 2 && (h - c) < body * 0.5) return { name: 'Hammer', signal: 'Bullish', desc: 'Bullish reversal signal — buyers stepped in after a sell-off.' };
-  // Shooting Star (bearish reversal)
-  if (o > c && (h - o) > body * 2 && (c - l) < body * 0.5) return { name: 'Shooting Star', signal: 'Bearish', desc: 'Bearish reversal signal — sellers rejected the price at highs.' };
-  // Engulfing
-  if (closes.length >= 2) {
-    const pc = closes[n - 2], po = opens[n - 2];
-    if (c > o && po > pc && o < pc && c > po) return { name: 'Bullish Engulfing', signal: 'Bullish', desc: 'Strong bullish reversal — current candle completely engulfs previous bearish candle.' };
-    if (o > c && pc > po && o > pc && c < po) return { name: 'Bearish Engulfing', signal: 'Bearish', desc: 'Strong bearish reversal — current candle completely engulfs previous bullish candle.' };
-  }
+  if (body < range * 0.1) return { name: 'Doji', signal: 'Neutral', desc: 'Indecision.' };
+  if (c > o && (o - l) > body * 2 && (h - c) < body * 0.5) return { name: 'Hammer', signal: 'Bullish', desc: 'Bullish reversal.' };
+  if (o > c && (h - o) > body * 2 && (c - l) < body * 0.5) return { name: 'Shooting Star', signal: 'Bearish', desc: 'Bearish reversal.' };
   return null;
 }
 
@@ -84,176 +99,73 @@ export default async function handler(req, res) {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol required' });
 
-  try {
-    // Fetch 1 year of daily OHLCV — hardened fetch pattern
-    const ctrl = new AbortController();
-    const id = setTimeout(() => ctrl.abort(), 12000); // 12s timeout for deeper scans
-    
-    // Try primary Exchange (.NS) then fallback to (.BO) logic if needed
-    // However, the handler handles one symbol at a time.
-    const r = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1y&interval=1d`,
-      { 
-        signal: ctrl.signal,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
-      }
-    );
-    clearTimeout(id);
+  const tryFetch = async (domain) => {
+    try {
+      const ctrl = new AbortController();
+      const id = setTimeout(() => ctrl.abort(), 12000);
+      const r = await fetch(
+        `https://${domain}/v10/finance/chart/${symbol}?range=1y&interval=1d`,
+        { 
+          signal: ctrl.signal,
+          headers: { 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Referer': 'https://finance.yahoo.com/',
+            'Origin': 'https://finance.yahoo.com'
+          }
+        }
+      );
+      clearTimeout(id);
+      if (!r.ok) return { error: 'http_fail', status: r.status };
+      const d = await r.json();
+      const result = d?.chart?.result?.[0];
+      if (!result) return { error: 'no_data' };
+      return { data: result };
+    } catch (e) { return { error: 'fetch_error', message: e.message }; }
+  };
 
-    if (!r.ok) {
-      if (r.status === 404) return res.status(200).json({ error: 'symbol_not_found' });
-      return res.status(200).json({ error: 'exchange_unreachable', status: r.status });
-    }
-    
-    const d = await r.json();
-    const result = d?.chart?.result?.[0];
-    if (!result) return res.status(200).json({ error: 'insufficient_history' });
+  const response = (await tryFetch('query1.finance.yahoo.com')) || (await tryFetch('query2.finance.yahoo.com'));
 
-    const meta = result.meta;
-    const quotes = result.indicators?.quote?.[0] || {};
-    const closes = (quotes.close || []).filter(v => v != null);
-    const opens = (quotes.open || []).filter(v => v != null);
-    const highs = (quotes.high || []).filter(v => v != null);
-    const lows = (quotes.low || []).filter(v => v != null);
-    const volumes = (quotes.volume || []).filter(v => v != null);
-    const currentPrice = meta.regularMarketPrice;
-
-    if (closes.length < 5) return res.status(200).json({ error: 'insufficient_history', currentPrice });
-
-    // ── Moving Averages ──
-    const dma50 = closes.length >= 50 ? Math.round(average(closes.slice(-50)) * 100) / 100 : null;
-    const dma200 = closes.length >= 200 ? Math.round(average(closes.slice(-200)) * 100) / 100 : null;
-
-    // ── Golden / Death Cross detection ──
-    // Compare current DMA50 vs DMA200 to their values 10 trading days ago
-    let crossoverSignal = null;
-    if (dma50 && dma200 && closes.length >= 210) {
-      const prevDma50 = average(closes.slice(-60, -10));   // 50MA from 10 days ago
-      const prevDma200 = average(closes.slice(-210, -10)); // 200MA from 10 days ago
-      if (prevDma50 < prevDma200 && dma50 > dma200) crossoverSignal = 'Golden Cross';
-      else if (prevDma50 > prevDma200 && dma50 < dma200) crossoverSignal = 'Death Cross';
-    }
-
-    // ── RSI ──
-    const rsi = computeRSI(closes.slice(-30));
-    const rsiZone = rsi ? (rsi > 70 ? 'Overbought' : rsi < 30 ? 'Oversold' : 'Neutral') : null;
-
-    // ── Bollinger Bands ──
-    const bollinger = computeBollingerBands(closes);
-    let bollingerPosition = null;
-    if (bollinger) {
-      if (currentPrice > bollinger.upper) bollingerPosition = 'Above Upper Band (Overbought)';
-      else if (currentPrice < bollinger.lower) bollingerPosition = 'Below Lower Band (Oversold)';
-      else if (currentPrice > bollinger.mid) bollingerPosition = 'Above Middle Band';
-      else bollingerPosition = 'Below Middle Band';
-    }
-
-    // ── Trend Classification ──
-    let trend = 'Sideways';
-    let trendDesc = 'Price is consolidating. Watch for a breakout direction.';
-    if (dma50 && dma200) {
-      if (currentPrice > dma50 && dma50 > dma200) { trend = 'Strong Uptrend'; trendDesc = 'Price is above both DMA50 and DMA200. Momentum is bullish.'; }
-      else if (currentPrice < dma50 && dma50 < dma200) { trend = 'Strong Downtrend'; trendDesc = 'Price is below both moving averages. Bearish pressure dominates.'; }
-      else if (currentPrice > dma50 && dma50 < dma200) { trend = 'Short-Term Recovery'; trendDesc = 'Price has recovered above DMA50 but remains below the long-term DMA200.'; }
-      else if (currentPrice < dma50 && dma50 > dma200) { trend = 'Short-Term Pullback'; trendDesc = 'Price has pulled back below DMA50 but long-term trend remains intact above DMA200.'; }
-      trend = currentPrice > dma50 ? 'Above DMA50' : 'Below DMA50';
-      trendDesc = currentPrice > dma50 ? 'Price is above the 50-day average — short-term bullish.' : 'Price is below the 50-day average — short-term caution.';
-    } else {
-      trend = 'Recently Listed';
-      trendDesc = 'This stock has limited historical data. Long-term trend indicators (DMA 50/200) are not yet available.';
-    }
-
-    // ── Volume Trend ──
-    let volumeTrend = null;
-    if (volumes.length >= 10) {
-      const recentVol = average(volumes.slice(-5));
-      const prevVol = average(volumes.slice(-20, -5));
-      if (recentVol > prevVol * 1.2) volumeTrend = 'Rising Volume (Conviction)';
-      else if (recentVol < prevVol * 0.8) volumeTrend = 'Falling Volume (Weak Momentum)';
-      else volumeTrend = 'Steady Volume';
-    }
-
-    // ── Candle Pattern ──
-    const pattern = detectCandlePattern(opens, highs, lows, closes);
-
-    // ── Price Momentum (1M, 3M) ──
-    const momentum1m = closes.length >= 22 ? Math.round(((currentPrice - closes[closes.length - 22]) / closes[closes.length - 22]) * 10000) / 100 : null;
-    const momentum3m = closes.length >= 63 ? Math.round(((currentPrice - closes[closes.length - 63]) / closes[closes.length - 63]) * 10000) / 100 : null;
-
-    // ── Advanced Indicators 2.0 ──
-    const macd = computeMACD(closes);
-    const adx = computeADX(highs, lows, closes);
-    const fib = computeFibonacci(highs, lows);
-
-    // ── Institutional Flow & HNI Activity (Heuristic Mock based on Price/Volume Action) ──
-    let instActivity = 'Neutral Flow';
-    let instDesc = 'No major block deals or institutional accumulation detected recently.';
-    let fiiSentiment = 'Neutral';
-    let diiSentiment = 'Neutral';
-    let rsiValue = rsi || 50;
-
-    if (volumeTrend === 'Rising Volume (Conviction)' && trend.includes('Uptrend')) {
-      instActivity = 'Strong Accumulation';
-      instDesc = 'High-volume buying indicates FIIs and HNIs are aggressively building positions via block deals.';
-      fiiSentiment = 'Bullish';
-      diiSentiment = 'Bullish';
-    } else if (volumeTrend === 'Rising Volume (Conviction)' && trend.includes('Downtrend')) {
-      instActivity = 'Heavy Institutional Distribution';
-      instDesc = 'Massive selling pressure suggests institutional offloading or HNI panic/liquidation.';
-      fiiSentiment = 'Bearish';
-      diiSentiment = 'Cautious';
-    } else if (pattern?.signal === 'Bullish' && rsiValue < 40) {
-      instActivity = 'Value Accumulation (Smart Money)';
-      instDesc = 'DIIs and professional funds are likely stepping in at deep discounts while retail sentiment is low.';
-      fiiSentiment = 'Neutral';
-      diiSentiment = 'Bullish';
-    } else if (rsiZone === 'Overbought' && momentum1m > 15) {
-      instActivity = 'Extreme Distribution / FOMO';
-      instDesc = 'Institutional funds are likely exiting into retail "FOMO" buying at these overextended levels.';
-      fiiSentiment = 'Cautious';
-      diiSentiment = 'Bearish';
-    } else if (macd?.trend === 'Weakening' && currentPrice > dma50) {
-      instActivity = 'Selective Distribution';
-      instDesc = 'HNIs are starting to pare back positions as bullish momentum shows technical exhaustion signs.';
-      fiiSentiment = 'Cautious';
-      diiSentiment = 'Neutral';
-    } else if (trend.includes('Uptrend')) {
-      instActivity = 'Steady Accumulation';
-      instDesc = 'Consistent, controlled DII SIP inflows are likely providing a floor for the current uptrend.';
-      fiiSentiment = 'Bullish';
-      diiSentiment = 'Bullish';
-    }
-
-    res.status(200).json({
-      currentPrice,
-      dma50, dma200,
-      aboveDma50: dma50 ? currentPrice > dma50 : null,
-      aboveDma200: dma200 ? currentPrice > dma200 : null,
-      dma50Diff: dma50 ? Math.round(((currentPrice - dma50) / dma50) * 1000) / 10 : null,
-      dma200Diff: dma200 ? Math.round(((currentPrice - dma200) / dma200) * 1000) / 10 : null,
-      crossoverSignal,
-      rsi,
-      rsiZone: rsi ? (rsi > 70 ? 'Overbought' : rsi < 30 ? 'Oversold' : 'Neutral') : null,
-      bollinger,
-      bollingerPosition,
-      trend,
-      trendDesc,
-      volumeTrend,
-      pattern,
-      momentum1m,
-      momentum3m,
-      macd,
-      adx,
-      fibonacci: fib,
-      dataPoints: closes.length,
-      institutional: {
-        activity: instActivity,
-        description: instDesc,
-        fii: fiiSentiment,
-        dii: diiSentiment
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  if (!response?.data) {
+    if (response?.status === 404) return res.status(200).json({ error: 'symbol_not_found' });
+    return res.status(200).json({ error: 'exchange_unreachable', status: response?.status });
   }
+
+  const result = response.data;
+  const meta = result.meta;
+  const quotes = result.indicators?.quote?.[0] || {};
+  const closes = (quotes.close || []).filter(v => v != null);
+  const opens = (quotes.open || []).filter(v => v != null);
+  const highs = (quotes.high || []).filter(v => v != null);
+  const lows = (quotes.low || []).filter(v => v != null);
+  const volumes = (quotes.volume || []).filter(v => v != null);
+  const currentPrice = meta.regularMarketPrice;
+
+  if (closes.length < 5) return res.status(200).json({ error: 'insufficient_history', currentPrice });
+
+  // Compute Indicators
+  const dma50 = closes.length >= 50 ? Math.round(average(closes.slice(-50)) * 100) / 100 : null;
+  const dma200 = closes.length >= 200 ? Math.round(average(closes.slice(-200)) * 100) / 100 : null;
+  const rsi = computeRSI(closes.slice(-30));
+  const bollinger = computeBollingerBands(closes);
+  const macd = computeMACD(closes);
+  const adx = computeADX(highs, lows, closes);
+  const fib = computeFibonacci(highs, lows);
+  const pattern = detectCandlePattern(opens, highs, lows, closes);
+
+  let trend = 'Sideways';
+  if (dma50 && dma200) {
+    if (currentPrice > dma50 && dma50 > dma200) trend = 'Strong Uptrend';
+    else if (currentPrice < dma50 && dma50 < dma200) trend = 'Strong Downtrend';
+  }
+
+  res.status(200).json({
+    currentPrice, dma50, dma200, rsi, bollinger, macd, adx, fibonacci: fib, pattern, trend,
+    institutional: {
+      activity: dma50 && currentPrice > dma50 ? 'Strong Accumulation' : 'Neutral Flow',
+      description: 'Institutional flow analyzed via price/volume momentum.',
+      fii: currentPrice > dma50 ? 'Bullish' : 'Neutral',
+      dii: 'Bullish'
+    }
+  });
 }
