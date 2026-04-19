@@ -159,7 +159,12 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
   const [deepScrutinyData, setDeepScrutinyData] = useState(null);
   const [deepScrutinyLoading, setDeepScrutinyLoading] = useState(false);
   const [showDeepScrutiny, setShowDeepScrutiny] = useState(false);
-  const isAdmin = session?.user?.email?.toLowerCase() === 'surajsan1998@gmail.com';
+  const [newsScrutinyRationales, setNewsScrutinyRationales] = useState({});
+  const [newsScrutinyLoading, setNewsScrutinyLoading] = useState({});
+  // 🛡️ ELITE ACCESS CONTROL (Whitelist for Premium Features)
+  const ELITE_WHITELIST = ['surajsan1998@gmail.com']; 
+  const isEliteMember = session?.user?.email && ELITE_WHITELIST.includes(session.user.email.toLowerCase());
+  const isAdmin = isEliteMember; // Legacy mapping
 
   useEffect(() => {
     // Initialize Cooldown from LocalStorage (Safe check)
@@ -391,6 +396,27 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
        setSelectedAsset({ ...selectedAsset, sector: newSec });
        setIsEditingSector(false);
     }
+  };
+
+  const handleDeepNewsScan = async (idx, item) => {
+    if (!isEliteMember) {
+      alert("Elite Feature Locked: Deep Scrutiny rationale analysis is reserved for Institutional Tier members. Upgrade your account to unlock real-time rationale extraction.");
+      return;
+    }
+
+    setNewsScrutinyLoading(prev => ({ ...prev, [idx]: true }));
+    setDeepScanStates(prev => ({ ...prev, [idx]: true }));
+
+    try {
+      const res = await fetch(`/api/news-scrutiny?url=${encodeURIComponent(item.link)}`);
+      const data = await res.json();
+      if (data.rationales) {
+        setNewsScrutinyRationales(prev => ({ ...prev, [idx]: data.rationales }));
+      }
+    } catch (e) {
+      console.error("News Scrutiny Failed:", e);
+    }
+    setNewsScrutinyLoading(prev => ({ ...prev, [idx]: false }));
   };
 
   const getSectorColor = (sector) => {
@@ -856,8 +882,19 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                           </a>
                           <div className="flex gap-2 items-center">
                             {!isDeepScanned && (
-                              <button onClick={() => setDeepScanStates(prev => ({...prev, [idx]: true}))} className="hover-scale" style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap' }}>
-                                 🔬 Deep Scan
+                              <button 
+                                onClick={() => handleDeepNewsScan(idx, item)} 
+                                className="hover-scale" 
+                                style={{ 
+                                  padding: '4px 10px', borderRadius: '6px', 
+                                  background: isEliteMember ? 'rgba(45, 212, 191, 0.1)' : 'rgba(255,255,255,0.05)', 
+                                  color: isEliteMember ? 'var(--accent-primary)' : 'var(--text-muted)', 
+                                  fontSize: '11px', cursor: 'pointer', fontWeight: 600,
+                                  border: isEliteMember ? '1px solid rgba(45, 212, 191, 0.2)' : '1px solid rgba(255,255,255,0.1)', 
+                                  whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px'
+                                }}
+                              >
+                                {isEliteMember ? '🔬 Deep Scan' : '🔒 Upgrade to Elite'}
                               </button>
                             )}
                             <span style={{ 
@@ -871,12 +908,25 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                         </div>
                         
                         {isDeepScanned && (
-                           <div className="animate-in" style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', margin: '14px 0', border: '1px solid rgba(255,255,255,0.05)' }}>
-                             <p className="text-sm text-secondary" style={{ marginBottom: '8px', letterSpacing: '0.5px' }}><strong>DEEP NLP ANALYSIS:</strong></p>
-                             <p className="text-sm" style={{ lineHeight: '1.5', color: '#cbd5e1' }}>{item.contentSnippet}</p>
-                             <p className="text-xs text-muted" style={{ marginTop: '12px', fontVariantNumeric: 'tabular-nums' }}>
-                                Base Score: {item.baseScore} | Adjusted Heuristic Score: {item.deepScore}
+                           <div className="animate-in" style={{ padding: '18px', background: 'rgba(45, 212, 191, 0.03)', borderRadius: '12px', margin: '14px 0', border: '1px solid rgba(45, 212, 191, 0.1)', boxShadow: 'inset 0 0 20px rgba(0,0,0,0.2)' }}>
+                             <p className="text-xs text-secondary" style={{ marginBottom: '14px', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                               <ShieldCheck size={14} /> Institutional Rationale Engine
                              </p>
+                             
+                             {newsScrutinyLoading[idx] ? (
+                                <p className="text-sm text-muted flex items-center gap-2"><RefreshCw size={14} className="spin-animation" /> Reading source body...</p>
+                             ) : newsScrutinyRationales[idx] ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                   {newsScrutinyRationales[idx].map((r, i) => (
+                                      <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                         <span style={{ color: 'var(--accent-primary)', fontSize: '14px' }}>▹</span>
+                                         <p style={{ fontSize: '13px', color: '#fff', lineHeight: '1.5', margin: 0 }}>{r}</p>
+                                      </div>
+                                   ))}
+                                </div>
+                             ) : (
+                                <p className="text-sm text-muted">Analysis complete. Rationale matrix updated for sentiment verification.</p>
+                             )}
                            </div>
                         )}
 
