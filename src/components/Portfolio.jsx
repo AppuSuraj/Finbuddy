@@ -163,8 +163,9 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
   const [newsScrutinyLoading, setNewsScrutinyLoading] = useState({});
   const [userProfile, setUserProfile] = useState(null);
 
-  // 🛡️ INSTITUTIONAL ACCESS CONTROL (DB-DRIVEN)
-  const isEliteMember = userProfile?.is_premium || session?.user?.email?.toLowerCase() === 'surajsan1998@gmail.com';
+  // 🛡️ INSTITUTIONAL ACCESS CONTROL (Self-Healing Overrides)
+  const isOwner = session?.user?.email?.toLowerCase() === 'surajsan1998@gmail.com';
+  const isEliteMember = isOwner || userProfile?.is_premium;
   const isAdmin = isEliteMember; // Legacy mapping
 
   useEffect(() => {
@@ -414,19 +415,20 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
       return;
     }
 
-    setNewsScrutinyLoading(prev => ({ ...prev, [idx]: true }));
+    const itemKey = item.link || item.title;
+    setNewsScrutinyLoading(prev => ({ ...prev, [itemKey]: true }));
     setDeepScanStates(prev => ({ ...prev, [idx]: true }));
 
     try {
       const res = await fetch(`/api/news-scrutiny?url=${encodeURIComponent(item.link)}`);
       const data = await res.json();
       if (data.rationales) {
-        setNewsScrutinyRationales(prev => ({ ...prev, [idx]: data.rationales }));
+        setNewsScrutinyRationales(prev => ({ ...prev, [itemKey]: data.rationales }));
       }
     } catch (e) {
       console.error("News Scrutiny Failed:", e);
     }
-    setNewsScrutinyLoading(prev => ({ ...prev, [idx]: false }));
+    setNewsScrutinyLoading(prev => ({ ...prev, [itemKey]: false }));
   };
 
   const getSectorColor = (sector) => {
@@ -923,11 +925,11 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                                <ShieldCheck size={14} /> Institutional Rationale Engine
                              </p>
                              
-                             {newsScrutinyLoading[idx] ? (
+                             {newsScrutinyLoading[item.link || item.title] ? (
                                 <p className="text-sm text-muted flex items-center gap-2"><RefreshCw size={14} className="spin-animation" /> Reading source body...</p>
-                             ) : (newsScrutinyRationales[idx] && newsScrutinyRationales[idx].length > 0) ? (
+                             ) : (newsScrutinyRationales[item.link || item.title] && newsScrutinyRationales[item.link || item.title].length > 0) ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                   {newsScrutinyRationales[idx].map((r, i) => (
+                                   {newsScrutinyRationales[item.link || item.title].map((r, i) => (
                                       <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                                          <span style={{ color: 'var(--accent-primary)', fontSize: '14px' }}>▹</span>
                                          <p style={{ fontSize: '13px', color: '#fff', lineHeight: '1.5', margin: 0 }}>{r}</p>

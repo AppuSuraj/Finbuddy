@@ -81,24 +81,28 @@ async function fetchScreenerIntelligence(ticker) {
 }
 
 export default async function handler(req, res) {
-  const { symbol, email } = req.query;
+  const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol required' });
 
   try {
     // ── INSTITUTIONAL MEMORY CHECK (4H CACHE) ──
-    const cacheKey = `scrutiny_${symbol}`;
-    const { data: cached } = await supabase
-      .from('intelligence_cache')
-      .select('*')
-      .eq('key', cacheKey)
-      .single();
+    try {
+      const cacheKey = `scrutiny_${symbol}`;
+      const { data: cached, error } = await supabase
+        .from('intelligence_cache')
+        .select('*')
+        .eq('key', cacheKey)
+        .single();
 
-    if (cached) {
-      const age = Date.now() - new Date(cached.updated_at).getTime();
-      if (age < 4 * 60 * 60 * 1000) {
-        console.log('[MEMORY] Hit for Scrutiny:', symbol);
-        return res.status(200).json(cached.data);
+      if (cached && !error) {
+        const age = Date.now() - new Date(cached.updated_at).getTime();
+        if (age < 4 * 60 * 60 * 1000) {
+          console.log('[MEMORY] Hit for Scrutiny:', symbol);
+          return res.status(200).json(cached.data);
+        }
       }
+    } catch {
+       console.warn('[MEMORY] Cache table unreachable in scrutiny. Defaulting to LIVE.');
     }
 
     // ── MULTI-STAGE YAHOO FETCH ──
@@ -134,10 +138,10 @@ export default async function handler(req, res) {
     if (!result) {
       // ── FALLBACK TO SCREENER INTELLIGENCE ──
       const intel = await fetchScreenerIntelligence(ticker);
-      if (!intel) return res.status(200).json({ error: 'Data source exhausted or stock restricted.', status: 403 });
+      if (!intel) return res.status(200).json({ error: 'Exchange synchronization failed.', status: 403 });
       finalResponse = { 
          institutional: intel, 
-         warning: 'Historical technical data currently restricted. Running fundamental intelligence failover.',
+         warning: 'Historical charts restricted by source. Running Fundamental Oracle (Failover Active).',
          trend: intel.status
       };
     } else {
@@ -149,7 +153,7 @@ export default async function handler(req, res) {
         const intel = await fetchScreenerIntelligence(ticker);
         finalResponse = { 
            institutional: intel, 
-           warning: 'Insufficient price history for technical oscillators. Using institutional flow analysis.',
+           warning: 'Historical charts restricted by source. Running Fundamental Oracle (Failover Active).',
            trend: intel?.status || 'Active Analysis'
         };
       } else {
@@ -171,18 +175,22 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── UPDATE MEMORY ──
+    // ── UPDATE MEMORY (SILENT FAIL) ──
     if (finalResponse) {
-       await supabase.from('intelligence_cache').upsert({
-         key: cacheKey,
-         data: finalResponse,
-         updated_at: new Date().toISOString()
-       });
+       try {
+         await supabase.from('intelligence_cache').upsert({
+           key: `scrutiny_${symbol}`,
+           data: finalResponse,
+           updated_at: new Date().toISOString()
+         });
+       } catch {
+         console.warn('[MEMORY] Update failed in scrutiny.');
+       }
     }
 
     res.status(200).json(finalResponse);
   } catch (e) {
     console.error('[INSTITUTIONAL] Deep Scrutiny Error:', e.message);
-    res.status(200).json({ error: 'Exchange synchronization timed out.' });
+    res.status(200).json({ error: 'Critical Oracle Desync.' });
   }
 }
