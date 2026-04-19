@@ -1,7 +1,9 @@
+const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
+
 // Deep Technical Analysis endpoint
 // MASTER FALLBACK DRIVER: Hardened for cloud-based cloud IP blocks
 // Computes: DMA50, DMA200, RSI, Golden/Death Cross, Trend, MACD, Fibonacci
-// Fallbacks to Institutional Sentiment Scrape if Yahoo charts are blocked.
 
 function average(arr) {
   if (!arr || arr.length === 0) return 0;
@@ -79,77 +81,108 @@ async function fetchScreenerIntelligence(ticker) {
 }
 
 export default async function handler(req, res) {
-  const { symbol } = req.query;
+  const { symbol, email } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol required' });
 
-  // ── MULTI-STAGE YAHOO FETCH ──
-  const userAgents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
-  ];
+  try {
+    // ── INSTITUTIONAL MEMORY CHECK (4H CACHE) ──
+    const cacheKey = `scrutiny_${symbol}`;
+    const { data: cached } = await supabase
+      .from('intelligence_cache')
+      .select('*')
+      .eq('key', cacheKey)
+      .single();
 
-  const tryYahoo = async (url) => {
-    try {
-      const idx = Math.floor(Math.random() * userAgents.length);
-      const r = await fetch(url, {
-        headers: { 
-          'User-Agent': userAgents[idx],
-          'Accept': 'application/json, text/plain, */*',
-          'Referer': 'https://finance.yahoo.com/',
-          'Origin': 'https://finance.yahoo.com'
-        }
-      });
-      if (!r.ok) return null;
-      const d = await r.json();
-      return d?.chart?.result?.[0];
-    } catch { return null; }
-  }
-
-  const ticker = symbol.toUpperCase();
-  // Attempt fetches
-  let result = await tryYahoo(`https://query1.finance.yahoo.com/v10/finance/chart/${ticker}?range=1y&interval=1d`);
-  if (!result) result = await tryYahoo(`https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?range=1y&interval=1d`);
-  if (!result && ticker.includes('.')) result = await tryYahoo(`https://query1.finance.yahoo.com/v10/finance/chart/${ticker.split('.')[0]}?range=1y&interval=1d`);
-
-  if (!result) {
-    // ── FALLBACK TO SCREENER INTELLIGENCE ──
-    const intel = await fetchScreenerIntelligence(ticker);
-    if (!intel) return res.status(200).json({ error: 'Data source exhausted. Please try again in 1 hour.', status: 403 });
-    return res.status(200).json({ 
-       institutional: intel, 
-       warning: 'Historical technical data currently restricted. Running fundamental intelligence failover.',
-       trend: intel.status
-    });
-  }
-
-  const quotes = result.indicators?.quote?.[0] || {};
-  const closes = (quotes.close || []).filter(v => v != null);
-  const currentPrice = result.meta.regularMarketPrice;
-
-  if (closes.length < 5) {
-    const intel = await fetchScreenerIntelligence(ticker);
-    return res.status(200).json({ 
-       institutional: intel, 
-       warning: 'Insufficient price history for technical oscillators. Using fundamental flow analysis.',
-       trend: intel?.status || 'Active Analysis'
-    });
-  }
-
-  // Indicators
-  const dma50 = closes.length >= 50 ? Math.round(average(closes.slice(-50)) * 100) / 100 : null;
-  const dma200 = closes.length >= 200 ? Math.round(average(closes.slice(-200)) * 100) / 100 : null;
-  const rsi = computeRSI(closes.slice(-30));
-  const macd = computeMACD(closes);
-
-  res.status(200).json({
-    currentPrice, dma50, dma200, rsi, macd,
-    trend: dma50 && currentPrice > dma50 ? 'Strong Uptrend' : 'Neutral',
-    institutional: {
-      activity: dma50 && currentPrice > dma50 ? 'Strong Accumulation' : 'Neutral Flow',
-      description: 'Institutional flow analyzed via price momentum and volume trends.',
-      fii: currentPrice > dma50 ? 'Bullish' : 'Neutral',
-      dii: 'Bullish'
+    if (cached) {
+      const age = Date.now() - new Date(cached.updated_at).getTime();
+      if (age < 4 * 60 * 60 * 1000) {
+        console.log('[MEMORY] Hit for Scrutiny:', symbol);
+        return res.status(200).json(cached.data);
+      }
     }
-  });
+
+    // ── MULTI-STAGE YAHOO FETCH ──
+    const userAgents = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36'
+    ];
+
+    const tryYahoo = async (url) => {
+      try {
+        const idx = Math.floor(Math.random() * userAgents.length);
+        const r = await fetch(url, {
+          headers: { 
+            'User-Agent': userAgents[idx],
+            'Accept': 'application/json, text/plain, */*',
+            'Referer': 'https://finance.yahoo.com/',
+            'Origin': 'https://finance.yahoo.com'
+          }
+        });
+        if (!r.ok) return null;
+        const d = await r.json();
+        return d?.chart?.result?.[0];
+      } catch { return null; }
+    }
+
+    const ticker = symbol.toUpperCase();
+    let result = await tryYahoo(`https://query1.finance.yahoo.com/v10/finance/chart/${ticker}?range=1y&interval=1d`);
+    if (!result) result = await tryYahoo(`https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?range=1y&interval=1d`);
+    if (!result && ticker.includes('.')) result = await tryYahoo(`https://query1.finance.yahoo.com/v10/finance/chart/${ticker.split('.')[0]}?range=1y&interval=1d`);
+
+    let finalResponse = null;
+
+    if (!result) {
+      // ── FALLBACK TO SCREENER INTELLIGENCE ──
+      const intel = await fetchScreenerIntelligence(ticker);
+      if (!intel) return res.status(200).json({ error: 'Data source exhausted or stock restricted.', status: 403 });
+      finalResponse = { 
+         institutional: intel, 
+         warning: 'Historical technical data currently restricted. Running fundamental intelligence failover.',
+         trend: intel.status
+      };
+    } else {
+      const quotes = result.indicators?.quote?.[0] || {};
+      const closes = (quotes.close || []).filter(v => v != null);
+      const currentPrice = result.meta.regularMarketPrice;
+
+      if (closes.length < 5) {
+        const intel = await fetchScreenerIntelligence(ticker);
+        finalResponse = { 
+           institutional: intel, 
+           warning: 'Insufficient price history for technical oscillators. Using institutional flow analysis.',
+           trend: intel?.status || 'Active Analysis'
+        };
+      } else {
+        const dma50 = closes.length >= 50 ? Math.round(average(closes.slice(-50)) * 100) / 100 : null;
+        const dma200 = closes.length >= 200 ? Math.round(average(closes.slice(-200)) * 100) / 100 : null;
+        const rsi = computeRSI(closes.slice(-30));
+        const macd = computeMACD(closes);
+
+        finalResponse = {
+          currentPrice, dma50, dma200, rsi, macd,
+          trend: dma50 && currentPrice > dma50 ? 'Strong Uptrend' : 'Neutral',
+          institutional: {
+            activity: dma50 && currentPrice > dma50 ? 'Strong Accumulation' : 'Neutral Flow',
+            description: 'Institutional flow analyzed via price momentum and volume trends.',
+            fii: currentPrice > dma50 ? 'Bullish' : 'Neutral',
+            dii: 'Bullish'
+          }
+        };
+      }
+    }
+
+    // ── UPDATE MEMORY ──
+    if (finalResponse) {
+       await supabase.from('intelligence_cache').upsert({
+         key: cacheKey,
+         data: finalResponse,
+         updated_at: new Date().toISOString()
+       });
+    }
+
+    res.status(200).json(finalResponse);
+  } catch (e) {
+    console.error('[INSTITUTIONAL] Deep Scrutiny Error:', e.message);
+    res.status(200).json({ error: 'Exchange synchronization timed out.' });
+  }
 }

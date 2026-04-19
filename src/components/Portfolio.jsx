@@ -161,13 +161,23 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
   const [showDeepScrutiny, setShowDeepScrutiny] = useState(false);
   const [newsScrutinyRationales, setNewsScrutinyRationales] = useState({});
   const [newsScrutinyLoading, setNewsScrutinyLoading] = useState({});
-  // 🛡️ ELITE ACCESS CONTROL (Whitelist for Premium Features)
-  const ELITE_WHITELIST = ['surajsan1998@gmail.com']; 
-  const isEliteMember = session?.user?.email && ELITE_WHITELIST.includes(session.user.email.toLowerCase());
+  const [userProfile, setUserProfile] = useState(null);
+
+  // 🛡️ INSTITUTIONAL ACCESS CONTROL (DB-DRIVEN)
+  const isEliteMember = userProfile?.is_premium || session?.user?.email?.toLowerCase() === 'surajsan1998@gmail.com';
   const isAdmin = isEliteMember; // Legacy mapping
 
   useEffect(() => {
-    // Initialize Cooldown from LocalStorage (Safe check)
+    // 1. Fetch Dynamic Profile (Premium Status)
+    const fetchProfile = async () => {
+      if (session?.user?.id) {
+        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        setUserProfile(data);
+      }
+    };
+    fetchProfile();
+
+    // 2. Initialize Cooldown from LocalStorage (Safe check)
     if (session?.user?.id) {
        const lastSync = localStorage.getItem(`finbuddy_last_sync_${session.user.id}`);
        if (lastSync) {
@@ -915,7 +925,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                              
                              {newsScrutinyLoading[idx] ? (
                                 <p className="text-sm text-muted flex items-center gap-2"><RefreshCw size={14} className="spin-animation" /> Reading source body...</p>
-                             ) : newsScrutinyRationales[idx] ? (
+                             ) : (newsScrutinyRationales[idx] && newsScrutinyRationales[idx].length > 0) ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                    {newsScrutinyRationales[idx].map((r, i) => (
                                       <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -925,7 +935,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                                    ))}
                                 </div>
                              ) : (
-                                <p className="text-sm text-muted">Analysis complete. Rationale matrix updated for sentiment verification.</p>
+                                <p className="text-sm text-muted">Analyzing core sentiment and metadata rationale...</p>
                              )}
                            </div>
                         )}
