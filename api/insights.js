@@ -17,7 +17,7 @@ function deepScore(text) {
   return score;
 }
 
-// ── SURGICAL SCRAPER FOR INDIAN STOCK FUNDAMENTALS ──
+// ── SURGICAL SCRAPER FOR INDIAN STOCK FUNDAMENTALS (RELIABLE FALLBACK) ──
 async function fetchScreenerFundamentals(ticker) {
   try {
     const cleanTicker = ticker.split('.')[0].replace(/[^A-Za-z0-9]/g, '');
@@ -34,8 +34,6 @@ async function fetchScreenerFundamentals(ticker) {
     
     const html = await r.text();
     
-    // Surgical extraction: Look for the specific <li> structure in the core metrics table
-    // This prevents matching meta tags or 'Pros/Cons' text
     const surgicalExtract = (label) => {
       // Structure: <span class="name">Label</span> <span class="value"> <span class="number">Value</span>
       const regex = new RegExp(`<span[^>]*class="name"[^>]*>\\s*${label}\\s*<\\/span>\\s*<span[^>]*class="nowrap value"[^>]*>(?:[^<]*|<span[^>]*>)*?<span[^>]*class="number"[^>]*>([^<]+)<\\/span>`, 'i');
@@ -44,7 +42,14 @@ async function fetchScreenerFundamentals(ticker) {
       return match[1].replace(/,/g, '').trim();
     };
 
+    // Special extract for High / Low (₹ 4,440 / 3,224)
+    const highLowRegex = /High \/ Low[\s\S]*?class="number">([^<]+)<\/span>\s*\/\s*<span[^>]*class="number">([^<]+)<\/span>/i;
+    const hlMatch = html.match(highLowRegex);
+
     return {
+      currentPrice: surgicalExtract('Current Price') ? parseFloat(surgicalExtract('Current Price')) : null,
+      high52w: hlMatch ? parseFloat(hlMatch[1].replace(/,/g, '')) : null,
+      low52w: hlMatch ? parseFloat(hlMatch[2].replace(/,/g, '')) : null,
       marketCap: surgicalExtract('Market Cap') ? Math.round(parseFloat(surgicalExtract('Market Cap'))) : null,
       pe: surgicalExtract('Stock P/E') ? parseFloat(surgicalExtract('Stock P/E')) : null,
       dividendYield: surgicalExtract('Dividend Yield') ? parseFloat(surgicalExtract('Dividend Yield')) : null,
@@ -60,19 +65,10 @@ async function fetchScreenerFundamentals(ticker) {
   }
 }
 
-// Yahoo Finance v7 quote — uses improved headers and fallback
+// Yahoo Finance v7 quote
 async function fetchYahooFundamentals(symbol) {
-  const fields = [
-    'regularMarketPrice', 'marketCap', 'trailingPE', 'forwardPE',
-    'priceToBook', 'dividendYield', 'bookValue', 'epsTrailingTwelveMonths',
-    'fiftyTwoWeekHigh', 'fiftyTwoWeekLow', 'longName', 'shortName',
-    'returnOnEquity', 'returnOnAssets', 'debtToEquity',
-  ].join(',');
-
-  const endpoints = [
-    `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=${fields}`,
-    `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=${fields}`,
-  ];
+  const fields = ['regularMarketPrice', 'marketCap', 'trailingPE', 'forwardPE', 'priceToBook', 'dividendYield', 'bookValue', 'epsTrailingTwelveMonths', 'fiftyTwoWeekHigh', 'fiftyTwoWeekLow', 'longName', 'shortName', 'returnOnEquity', 'returnOnAssets', 'debtToEquity'].join(',');
+  const endpoints = [`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=${fields}`, `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=${fields}`];
 
   for (const url of endpoints) {
     try {
@@ -94,19 +90,18 @@ async function fetchYahooFundamentals(symbol) {
       if (!q) continue;
       return {
         currentPrice: q.regularMarketPrice,
-        marketCap: q.marketCap ? Math.round(q.marketCap / 10000000) : null, // Convert to Cr
+        marketCap: q.marketCap ? Math.round(q.marketCap / 10000000) : null,
         pe: q.trailingPE ? Math.round(q.trailingPE * 10) / 10 : null,
         bookValue: q.bookValue ? Math.round(q.bookValue * 100) / 100 : null,
-        dividendYield: q.dividendYield ? Math.round(q.dividendYield * 1000) / 10 : null, // As percentage
+        dividendYield: q.dividendYield ? Math.round(q.dividendYield * 1000) / 10 : null,
         roe: q.returnOnEquity ? Math.round(q.returnOnEquity * 1000) / 10 : null,
         roce: q.returnOnAssets ? Math.round(q.returnOnAssets * 1000) / 10 : null,
         high52w: q.fiftyTwoWeekHigh,
         low52w: q.fiftyTwoWeekLow,
         longName: q.longName || q.shortName,
-        faceValue: null,
         dataSource: 'Yahoo Finance',
       };
-    } catch (e) { /* try next endpoint */ }
+    } catch (e) { }
   }
   return null;
 }
@@ -115,28 +110,16 @@ async function fetchYahooFundamentals(symbol) {
 async function fetchYahooPrice(symbol) {
   const tryFetch = async (domain) => {
     try {
-      const r = await fetch(
-        `https://${domain}/v10/finance/chart/${symbol}?range=1d&interval=1d`,
-        { headers: { 
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-            'Accept': 'application/json',
-            'Referer': 'https://finance.yahoo.com/'
-          } 
-        }
-      );
+      const r = await fetch(`https://${domain}/v10/finance/chart/${symbol}?range=1d&interval=1d`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36', 'Accept': 'application/json', 'Referer': 'https://finance.yahoo.com/' }
+      });
       if (!r.ok) return null;
       const d = await r.json();
       const meta = d?.chart?.result?.[0]?.meta;
       if (!meta?.regularMarketPrice) return null;
-      return { 
-        currentPrice: meta.regularMarketPrice, 
-        high52w: meta.fiftyTwoWeekHigh, 
-        low52w: meta.fiftyTwoWeekLow, 
-        longName: meta.longName || meta.shortName 
-      };
+      return { currentPrice: meta.regularMarketPrice, high52w: meta.fiftyTwoWeekHigh, low52w: meta.fiftyTwoWeekLow, longName: meta.longName || meta.shortName };
     } catch (e) { return null; }
   };
-
   return (await tryFetch('query1.finance.yahoo.com')) || (await tryFetch('query2.finance.yahoo.com'));
 }
 
@@ -155,7 +138,6 @@ export default async function handler(req, res) {
 
   res.setHeader('Cache-Control', 'no-store, max-age=0');
 
-  // Parallel fetch from Yahoo and Screener
   const [yahooFundamentals, priceData, screenerData] = await Promise.all([
     fetchYahooFundamentals(yahooSymbol),
     fetchYahooPrice(yahooSymbol),
@@ -164,29 +146,33 @@ export default async function handler(req, res) {
 
   const companyFullName = yahooFundamentals?.longName || priceData?.longName || rawName;
 
-  // Selective Data Merging: Market Cap and P/E are prioritized from Yahoo, but fell back to Screener
   const profile = {
-    currentPrice: yahooFundamentals?.currentPrice || priceData?.currentPrice,
-    high52w: yahooFundamentals?.high52w || priceData?.high52w,
-    low52w: yahooFundamentals?.low52w || priceData?.low52w,
+    currentPrice: yahooFundamentals?.currentPrice || priceData?.currentPrice || screenerData?.currentPrice,
+    high52w: yahooFundamentals?.high52w || priceData?.high52w || screenerData?.high52w,
+    low52w: yahooFundamentals?.low52w || priceData?.low52w || screenerData?.low52w,
     marketCap: yahooFundamentals?.marketCap || screenerData?.marketCap,
     pe: yahooFundamentals?.pe || screenerData?.pe,
     bookValue: yahooFundamentals?.bookValue || screenerData?.bookValue,
     dividendYield: yahooFundamentals?.dividendYield || screenerData?.dividendYield,
     roe: yahooFundamentals?.roe || screenerData?.roe,
     roce: yahooFundamentals?.roce || screenerData?.roce,
-    faceValue: screenerData?.faceValue,
     companyName: companyFullName,
     dataSource: yahooFundamentals ? 'Yahoo Finance' : screenerData ? 'Institutional Screener' : priceData ? 'Yahoo Finance (price only)' : null,
   };
 
-  // News Search
+  // ── REFINED NEWS ENGINE (Financial Category Firewall) ──
+  // Keywords that must be present for an article to be considered financial
+  const financialKeywords = ['stock', 'price', 'share', 'dividend', 'profit', 'results', 'loss', 'earnings', 'revenue', 'order', 'deal', 'acquisition', 'merger', 'market', 'trade', 'investment', 'nifty', 'sensex', 'bse', 'nse', 'fundamental', 'technical', 'analysis'];
+  // Keywords that often produce noisy false positives for tickers like LT or SAFARI
+  const noiseKeywords = ['lt gen', 'lieutenant', 'general', 'army', 'military', 'readiness', 'division', 'soldier', 'vacation', 'trip', 'dua lipa', 'travel', 'wildlife', 'safari park', 'tourist', 'booking'];
+
   const searchName = companyFullName.replace(/Ltd\.?|Limited|Corp\.?|Corporation/gi, '').split(' ').slice(0, 3).join(' ').trim();
-  const querySuffix = isIndian && searchName.length < 15 ? ' stock news' : ' news';
+  // Using explicit "stock" and "financial" terms to force Google News category relevance
+  const querySuffix = ` "stock" OR "shares" OR "price"`;
 
   const [googleFeed, recentFeed, etFeed] = await Promise.all([
     fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(`"${searchName}"${querySuffix}`)}&hl=en-IN&gl=IN&ceid=IN:en`),
-    fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(searchName)}&hl=en-IN&gl=IN&ceid=IN:en`),
+    fetchFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(searchName + ' "financial results" OR "dividend"')}&hl=en-IN&gl=IN&ceid=IN:en`),
     fetchFeed(`https://economictimes.indiatimes.com/rsssearchresult.cms?query=${encodeURIComponent(searchName)}`),
   ]);
 
@@ -194,29 +180,39 @@ export default async function handler(req, res) {
   const news = [];
 
   const processItems = (items = [], sourceName) => {
-    (items || []).slice(0, 12).forEach(item => {
-      let title = item.title || '';
+    (items || []).forEach(item => {
+      let title = (item.title || '');
+      let content = (item.contentSnippet || '').toLowerCase();
+      const lowerTitle = title.toLowerCase();
+
+      // 1. DEDUPLICATION
+      const titleSig = lowerTitle.slice(0, 45).replace(/[^a-z]/g, '');
+      if (!title || seen.has(titleSig)) return;
+
+      // 2. FINANCIAL RELEVANCE & NOISE FILTER
+      const hasFinancialLink = financialKeywords.some(kw => lowerTitle.includes(kw) || content.includes(kw));
+      const hasNoise = noiseKeywords.some(kw => lowerTitle.includes(kw));
+      
+      // Strict rule: Must have financial keyword AND must not have noise keyword (for short/generic names)
+      if (!hasFinancialLink || (searchName.length < 15 && hasNoise)) return;
+
+      seen.add(titleSig);
+
       let publisher = sourceName;
       if (title.includes(' - ')) {
         const parts = title.split(' - ');
-        const last = parts[parts.length - 1];
-        if (last.length < 50) { publisher = parts.pop(); title = parts.join(' - '); }
+        if (parts[parts.length - 1].length < 40) { publisher = parts.pop(); title = parts.join(' - '); }
       }
-      title = title.trim();
-      const titleSig = title.slice(0, 45).toLowerCase();
-      if (!title || seen.has(titleSig)) return;
-      seen.add(titleSig);
 
-      const fullText = title + ' ' + (item.contentSnippet || '');
-      const score = deepScore(fullText);
+      const score = deepScore(lowerTitle + ' ' + content);
+      // We only accept articles with a score that isn't purely zero/generic if possible
       const grade = score > 1 ? 'Positive' : score < -1 ? 'Negative' : 'Neutral';
-      const publishTime = item.isoDate || item.pubDate || new Date().toISOString();
       
       news.push({
-        title, link: item.link || item.guid, publisher,
-        providerPublishTime: publishTime,
+        title: title.trim(), link: item.link || item.guid, publisher,
+        providerPublishTime: item.isoDate || item.pubDate || new Date().toISOString(),
         sentimentGrade: grade, deepSentimentGrade: grade,
-        contentSnippet: item.contentSnippet || 'Comprehensive financial update available.',
+        contentSnippet: item.contentSnippet || 'Institutional financial update available.',
         baseScore: score, deepScore: score,
       });
     });
