@@ -11,7 +11,7 @@ const TRUSTED_FINANCIAL_SOURCES = [
 ];
 
 const TICKER_EXCLUSIONS = {
-  'LT': ['foods', 'governor', 'governer', 'lt gen', 'lieutenant', 'fairfax'],
+  'LT': ['foods', 'governor', 'governer', 'lt gen', 'lieutenant', 'fairfax', 'hdfc', 'ultratech', 'lupin', 'ltm share', 'ltm registered'],
   'SAFARI': ['dua lipa', 'wildlife', 'park', 'trip', 'tourist', 'booking', 'review']
 };
 
@@ -103,7 +103,7 @@ export default async function handler(req, res) {
     dataSource: screenerData ? 'Institutional Screener' : 'Yahoo Finance',
   };
 
-  // ── PURE BUSINESS NEWS ENGINE ──
+  // ── PURE BUSINESS NEWS ENGINE (Terminal 4.1 "Entity Lock") ──
   const searchName = profile.companyName.replace(/Ltd\.?|Limited|Corp\.?|Corporation/gi, '').trim();
   const exclusions = TICKER_EXCLUSIONS[ticker] || [];
   
@@ -114,7 +114,7 @@ export default async function handler(req, res) {
     'site:businesstoday.in', 'site:thehindubusinessline.com', 'site:reuters.com', 'site:bloomberg.com'
   ].join(' OR ');
   
-  const queryPrefix = ticker === 'LT' ? `"Larsen & Toubro" OR "L&T"` : `"${searchName}"`;
+  const queryPrefix = ticker === 'LT' ? `intitle:"Larsen & Toubro" OR intitle:L&T` : `"${searchName}"`;
   const mainQuery = `(${queryPrefix}) (${financialSites})`;
   
   const [newsFeed, etFeed] = await Promise.all([
@@ -140,13 +140,20 @@ export default async function handler(req, res) {
       const isTrusted = TRUSTED_FINANCIAL_SOURCES.some(s => publisher.includes(s) || title.toLowerCase().includes(s));
       if (!isTrusted) return;
 
-      // 3. NOISE EXCLUSION
+      // 3. SURGICAL NOISE EXCLUSION
       if (exclusions.some(exc => lowerTitle.includes(exc) || content.includes(exc))) return;
 
-      // 4. SMART RELEVANCY Check: Title must contain core words
-      const coreWords = searchName.toLowerCase().split(' ').filter(w => w.length > 2);
-      const matchesCore = coreWords.some(w => lowerTitle.includes(w)) || (ticker.length > 1 && lowerTitle.includes(ticker.toLowerCase()));
-      if (!matchesCore) return;
+      // 4. ENTITY LOCK Check: Regex Whole-Word Match
+      // This ensures we match "L&T" or "Larsen" but not "UltraTech" or "Results"
+      let entityMatch = false;
+      if (ticker === 'LT') {
+        entityMatch = /\blarsen\b/i.test(lowerTitle) || /\bl&t\b/i.test(lowerTitle);
+      } else {
+        const coreWords = searchName.toLowerCase().split(' ').filter(w => w.length > 2);
+        entityMatch = coreWords.some(w => lowerTitle.includes(w)) || new RegExp('\\b' + ticker + '\\b', 'i').test(lowerTitle);
+      }
+
+      if (!entityMatch) return;
 
       seen.add(sig);
       const score = deepScore(lowerTitle + ' ' + content);
