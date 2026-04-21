@@ -6,6 +6,6 @@
   },
   "rewrites": [
     { "source": "/api/finance/:symbol", "destination": "/api/finance.js?symbol=:symbol" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
