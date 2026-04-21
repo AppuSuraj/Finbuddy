@@ -1,7 +1,8 @@
-import Sentiment from 'sentiment';
-import { createClient } from '@supabase/supabase-js';
-
+import pkg from 'sentiment';
+const Sentiment = pkg;
 const analyzer = new Sentiment();
+
+import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
   const { url } = req.query;

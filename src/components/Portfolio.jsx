@@ -336,33 +336,6 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
     else alert('Oracle Timeout or no valid stock tickers identified.');
   };
 
-  const handleDeepScrutiny = async (asset) => {
-    if (!isAdmin) {
-      alert("Deep Scrutiny is a Premium feature. Please upgrade your account to unlock Institutional Flow & Deep Technical Analysis.");
-      return;
-    }
-
-    setShowDeepScrutiny(true);
-    const ticker = smartResolveTicker(asset.name);
-    console.log(`[INSTITUTIONAL] Attemping Deep Scrutiny for: ${asset.name} (Resolved Ticker: ${ticker})`);
-    setDeepScrutinyData(null);
-    setDeepScrutinyLoading(true);
-    try {
-      const [techRes, profileRes] = await Promise.allSettled([
-        fetch(`/api/deep-scrutiny?symbol=${ticker}.NS`).then(r => r.ok ? r.json() : fetch(`/api/deep-scrutiny?symbol=${ticker}.BO`).then(r2 => r2.json())),
-        fetch(`/api/profile?symbol=${ticker}.NS`).then(r => r.json()),
-      ]);
-      const tech = techRes.status === 'fulfilled' ? techRes.value : null;
-      const prof = profileRes.status === 'fulfilled' ? profileRes.value : null;
-      if (prof?.sector && prof.sector !== 'Unknown') {
-        await supabase.from('assets').update({ sector: prof.sector }).eq('id', asset.id);
-        if (onPortfolioChange) onPortfolioChange();
-        if (selectedAsset?.id === asset.id) setSelectedAsset({...selectedAsset, sector: prof.sector});
-      }
-      setDeepScrutinyData(tech);
-    } catch(e) { setDeepScrutinyData(null); }
-    setDeepScrutinyLoading(false);
-  };
 
   const handleSelectAsset = async (asset) => {
     setSelectedAsset(asset);
@@ -407,14 +380,24 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
       const queryName = encodeURIComponent(asset.name);
       const querySector = asset.sector ? `&sector=${encodeURIComponent(asset.sector)}` : '';
       let res = await fetch(`/api/insights?symbol=${ticker}.NS&name=${queryName}${querySector}`);
-      let data = await res.json();
+      let contentType = res.headers.get("content-type");
+      let data;
       
-      if (data.error || (!data.profile && (!data.news || data.news.length === 0))) {
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        throw new Error("Invalid response");
+      }
+      
+      if (data?.error || (!data?.profile && (!data?.news || data.news.length === 0))) {
          res = await fetch(`/api/insights?symbol=${ticker}.BO&name=${queryName}${querySector}`);
-         data = await res.json();
+         contentType = res.headers.get("content-type");
+         if (contentType && contentType.includes("application/json")) {
+           data = await res.json();
+         }
       }
 
-      setInsightsData(data);
+      setInsightsData(data || { error: 'No data found' });
     } catch {
       setInsightsData({ error: 'Failed to fetch insights' });
     }
