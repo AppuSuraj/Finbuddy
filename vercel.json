@@ -6,6 +6,14 @@
   },
   "rewrites": [
     { "source": "/api/finance/:symbol", "destination": "/api/finance.js?symbol=:symbol" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/api/deep-scrutiny", "destination": "/api/deep-scrutiny.js" },
+    { "source": "/api/news-scrutiny", "destination": "/api/news-scrutiny.js" },
+    { "source": "/api/insights", "destination": "/api/insights.js" },
+    { "source": "/api/profile", "destination": "/api/profile.js" },
+    { "source": "/api/prices", "destination": "/api/prices.js" },
+    { "source": "/api/sparkline", "destination": "/api/sparkline.js" },
+    { "source": "/api/test", "destination": "/api/test.js" },
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
