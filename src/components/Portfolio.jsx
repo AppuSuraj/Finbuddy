@@ -426,7 +426,8 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
     setDeepScanStates(prev => ({ ...prev, [idx]: true }));
 
     try {
-      const res = await fetch(`/api/news-scrutiny?url=${encodeURIComponent(item.link)}`);
+      const ticker = smartResolveTicker(selectedAsset.name);
+      const res = await fetch(`/api/news-scrutiny?url=${encodeURIComponent(item.link)}&title=${encodeURIComponent(item.title)}&symbol=${ticker}&sentiment=${item.sentimentGrade || 'Neutral'}`);
       const contentType = res.headers.get("content-type");
       
       if (contentType && contentType.includes("application/json")) {
