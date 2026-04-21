@@ -165,6 +165,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
 
   // 🛡️ INSTITUTIONAL ACCESS CONTROL (Self-Healing Overrides)
   const isOwner = session?.user?.email?.toLowerCase() === 'surajsan1998@gmail.com';
+  // Force Elite status for the owner to prevent the UI from 'vanishing' on database latency
   const isEliteMember = isOwner || userProfile?.is_premium;
   const isAdmin = isEliteMember; // Legacy mapping
 
