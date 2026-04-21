@@ -65,10 +65,16 @@ export default async function handler(req, res) {
     }
 
     // ── LIVE ANALYSIS ──
-    const ticker = symbol.toUpperCase();
-    const yahooUrl = `https://query1.finance.yahoo.com/v10/finance/chart/${ticker}?range=1y&interval=1d`;
-    const r = await fetch(yahooUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-    const result = r.ok ? (await r.json())?.chart?.result?.[0] : null;
+    const cleanTicker = symbol.toUpperCase().split('.')[0];
+    const tryFetch = async (suffix) => {
+      const url = `https://query1.finance.yahoo.com/v10/finance/chart/${cleanTicker}${suffix}?range=1y&interval=1d`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      return res.ok ? (await res.json())?.chart?.result?.[0] : null;
+    };
+
+    let result = await tryFetch('.NS');
+    if (!result) result = await tryFetch('.BO');
+    if (!result) result = await tryFetch(''); // Last ditch
 
     let finalResponse = null;
 

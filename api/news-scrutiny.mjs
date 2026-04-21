@@ -64,7 +64,12 @@ export default async function handler(req, res) {
 
         const scraped = sentences
           .map(s => ({ text: s.trim(), score: analyzer.analyze(s).score }))
-          .filter(s => s.text.length > 60 && s.text.length < 250)
+          .filter(s => {
+             const t = s.text.toLowerCase();
+             // Filter out generic Google News boilerplate
+             if (t.includes('comprehensive up-to-date news coverage') || t.includes('aggregated from sources')) return false;
+             return s.text.length > 60 && s.text.length < 250;
+          })
           .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
           .slice(0, 3)
           .map(s => s.text);
