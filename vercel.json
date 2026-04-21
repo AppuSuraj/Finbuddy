@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
     { "source": "/api/finance/:symbol", "destination": "/api/finance.js?symbol=:symbol" },
     { "source": "/api/:path*", "destination": "/api/:path*" },

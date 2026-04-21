@@ -1,4 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 function average(arr) {
   if (!arr || arr.length === 0) return 0;
@@ -104,8 +104,10 @@ export default async function handler(req, res) {
        } catch { console.warn('[CACHE] Save failed.'); }
     }
 
+    res.setHeader('Content-Type', 'application/json');
     res.status(200).json(finalResponse);
   } catch (e) {
+    res.setHeader('Content-Type', 'application/json');
     res.status(200).json({ error: 'Critical Oracle Desync.', warning: 'Synchronization in progress...' });
   }
 }

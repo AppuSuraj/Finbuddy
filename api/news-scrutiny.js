@@ -1,6 +1,7 @@
-const sentiment = require('sentiment');
-const { createClient } = require('@supabase/supabase-js');
-const analyzer = new sentiment();
+import Sentiment from 'sentiment';
+import { createClient } from '@supabase/supabase-js';
+
+const analyzer = new Sentiment();
 
 export default async function handler(req, res) {
   const { url } = req.query;
@@ -82,8 +83,10 @@ export default async function handler(req, res) {
       } catch (e) { console.warn('[CACHE] Save failed.'); }
     }
 
+    res.setHeader('Content-Type', 'application/json');
     res.status(200).json(result);
   } catch (e) {
+    res.setHeader('Content-Type', 'application/json');
     res.status(200).json({ 
       rationales: ['Automated Insight Error: Reviewing primary source manually.', 'Context suggests focus on liquidity and core revenue drivers.'],
       error: e.message 

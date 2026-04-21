@@ -375,11 +375,33 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
     const ticker = smartResolveTicker(asset.name);
 
     // Parallel fetch for Deep Technical Analysis (Integrated)
-    fetch(`/api/deep-scrutiny?symbol=${ticker}.NS`).then(r => r.ok ? r.json() : fetch(`/api/deep-scrutiny?symbol=${ticker}.BO`).then(r2 => r2.json()))
-      .then(data => {
-         setDeepScrutinyData(data);
-         setDeepScrutinyLoading(false);
-      }).catch(() => setDeepScrutinyLoading(false));
+    const fetchScrutiny = async () => {
+      try {
+        const res = await fetch(`/api/deep-scrutiny?symbol=${ticker}.NS`);
+        if (!res.ok) throw new Error("Primary failed");
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+           const data = await res.json();
+           setDeepScrutinyData(data);
+        } else {
+           throw new Error("Invalid response format");
+        }
+      } catch {
+        try {
+          const res2 = await fetch(`/api/deep-scrutiny?symbol=${ticker}.BO`);
+          const contentType = res2.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+             const data = await res2.json();
+             setDeepScrutinyData(data);
+          }
+        } catch {
+          setDeepScrutinyData({ error: 'Exchange synchronization error' });
+        }
+      } finally {
+        setDeepScrutinyLoading(false);
+      }
+    };
+    fetchScrutiny();
 
     try {
       const queryName = encodeURIComponent(asset.name);
@@ -421,9 +443,19 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
 
     try {
       const res = await fetch(`/api/news-scrutiny?url=${encodeURIComponent(item.link)}`);
-      const data = await res.json();
-      if (data.rationales) {
-        setNewsScrutinyRationales(prev => ({ ...prev, [itemKey]: data.rationales }));
+      const contentType = res.headers.get("content-type");
+      
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (data.rationales) {
+          setNewsScrutinyRationales(prev => ({ ...prev, [itemKey]: data.rationales }));
+        }
+      } else {
+        // Handle HTML fallback (Routing error)
+        setNewsScrutinyRationales(prev => ({ 
+          ...prev, 
+          [itemKey]: ['Institutional gateway error. Please refresh or try another scan.'] 
+        }));
       }
     } catch (e) {
       console.error("News Scrutiny Failed:", e);
