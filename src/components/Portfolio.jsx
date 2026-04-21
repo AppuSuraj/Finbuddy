@@ -782,7 +782,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
               </div>
              
                {/* ── UNIFIED INSTITUTIONAL INTELLIGENCE (Top Placement) ── */}
-               <div style={{ marginBottom: '32px' }}>
+               <div style={{ marginBottom: '48px' }}>
                  {isEliteMember && (
                     <div className="modal-animate-in" style={{ background: 'rgba(45, 212, 191, 0.04)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(45, 212, 191, 0.1)', boxShadow: 'inset 0 0 20px rgba(45, 212, 191, 0.05)' }}>
                        {/* Sub-Header / Connectivity Logic */}
@@ -865,6 +865,15 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                        )}
                     </div>
                  )}
+
+               </div>
+
+               {/* ── ASSET FUNDAMENTALS (Isolated Section) ── */}
+               <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '40px', marginTop: '40px', marginBottom: '24px' }}>
+                  <h4 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '1px', color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Database size={16} /> Financial Fundamentals
+                  </h4>
+               </div>
 
               {fetchingInsights ? (
                 <div style={{ padding: '60px 0', textAlign: 'center' }}>
