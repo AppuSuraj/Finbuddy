@@ -967,6 +967,7 @@ export default function Portfolio({ session, assets, loading, onPortfolioChange,
                 </div>
               ) : null}
            </div>
+          </div>
         </div>
       )}
     </div>
