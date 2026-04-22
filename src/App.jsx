@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Portfolio from './components/Portfolio';
@@ -203,6 +204,7 @@ function App() {
           </Routes>
         </main>
       </div>
+      <Analytics />
     </Router>
   );
 }
